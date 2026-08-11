@@ -44,6 +44,36 @@ function fakeOctokit(prBody: string | null, issueBody?: string): OctokitLike {
   };
 }
 
+interface IssueGetArgs {
+  owner: string;
+  repo: string;
+  issue_number: number;
+}
+
+function spyOctokit(prBody: string | null, issueBody?: string): {
+  octokit: OctokitLike;
+  issueGetCalls: IssueGetArgs[];
+} {
+  const issueGetCalls: IssueGetArgs[] = [];
+  const octokit: OctokitLike = {
+    pulls: {
+      get: async () => ({ data: { body: prBody } }),
+      listFiles: async () => ({
+        data: [
+          { filename: 'src/a.ts', status: 'modified', additions: 3, deletions: 1, patch: '@@ x @@' },
+        ],
+      }),
+    },
+    issues: {
+      get: async (args) => {
+        issueGetCalls.push(args);
+        return { data: { body: issueBody ?? '' } };
+      },
+    },
+  };
+  return { octokit, issueGetCalls };
+}
+
 describe('buildContext', () => {
   const base = { owner: 'o', repo: 'r', prNumber: 1, commitSha: 'abc123', runner };
 
@@ -69,9 +99,32 @@ describe('buildContext', () => {
     expect(ctx.criteria).toBe('Agrega validación de DNI');
   });
 
+  it('cae al cuerpo de la PR si el issue vinculado tiene body vacío', async () => {
+    // A diferencia del test anterior, este body SÍ tiene palabra clave de
+    // cierre: extractIssueNumber encuentra el #42, buildContext consulta
+    // issues.get, encuentra un body vacío/blanco, lo descarta, y recién ahí
+    // cae al cuerpo de la PR. Ejercita la rama donde se consulta el issue.
+    const ctx = await buildContext({
+      ...base,
+      octokit: fakeOctokit('Closes #42 - agrega validación de DNI', '   '),
+    });
+    expect(ctx.criteriaSource).toBe('pull_request');
+    expect(ctx.criteria).toBe('Closes #42 - agrega validación de DNI');
+  });
+
   it('deja criteria en null si no hay issue ni cuerpo', async () => {
     const ctx = await buildContext({ ...base, octokit: fakeOctokit(null) });
     expect(ctx.criteriaSource).toBeNull();
     expect(ctx.criteria).toBeNull();
+  });
+
+  it('invoca issues.get con el número de issue extraído del body, no con el de la PR', async () => {
+    const { octokit, issueGetCalls } = spyOctokit('Closes #42', 'criterios del issue');
+    await buildContext({ ...base, octokit });
+    expect(issueGetCalls).toEqual([{ owner: 'o', repo: 'r', issue_number: 42 }]);
+    // prNumber (1) y el issue_number extraído (42) son distintos a propósito:
+    // si buildContext pasara prNumber en vez del número extraído, este
+    // assert lo detectaría.
+    expect(issueGetCalls[0]?.issue_number).not.toBe(base.prNumber);
   });
 });
