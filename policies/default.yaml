@@ -1,0 +1,28 @@
+model: claude-sonnet-5
+
+required:
+  - build
+  - tests
+
+block_on: [CRITICAL, HIGH]
+comment_only: [MEDIUM, LOW, INFO]
+
+min_confidence: 0.7
+
+on_test_failure:
+  run_auditors: [scope, acceptance]
+
+auditors:
+  acceptance:
+    when: criteria_available
+  scope:
+    when: always
+    effort: low
+  backend:
+    when: [backend_changed]
+  database:
+    when: [database_changed]
+  security:
+    when: [auth_changed, deps_changed, endpoints_changed]
+  infrastructure:
+    when: [infra_changed]
