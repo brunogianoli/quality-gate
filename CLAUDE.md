@@ -4,105 +4,59 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Estado actual
 
-Repositorio greenfield: sólo existe `Plan.md` (la especificación completa del producto). No hay código, ni control de versiones inicializado, ni stack tecnológico elegido todavía.
+El diseño está aprobado y documentado en `docs/superpowers/specs/2026-08-11-quality-gate-design.md`. **Ese spec es la fuente de verdad** — este archivo resume lo que hace falta saber antes de tocar código y señala los invariantes que se rompen con facilidad.
 
-Consecuencias prácticas:
+Todavía no hay código: el paquete Node no está inicializado, así que no hay comandos de build, test ni lint. Cuando se inicialice, actualizar esta sección con los comandos reales, incluido cómo correr un test individual.
 
-- **No hay comandos de build/test/lint aún.** Cuando se elija el stack e inicialice el proyecto, actualizar esta sección con los comandos reales (build, test suite completa, test individual, lint).
-- `Plan.md` §33 exige que **antes de escribir código** se acuerden: stack, estructura del repo, contratos entre módulos, modelo de datos, eventos, API, estrategia de Sandbox y estrategia de integración con GitHub. Son decisiones de producto: confirmarlas con el usuario, no asumirlas.
+`Plan.md` es material de referencia: la conversación exploratoria de la que salió la idea. El spec la reemplaza en todo punto donde difieran.
 
 ## Qué es este producto
 
-Un **Quality System** que audita Pull Requests de otros equipos/agentes. No es un coding agent. La distinción es el eje de todo el diseño (`Plan.md` §34):
+Un **quality gate** que corre como GitHub Action en cada Pull Request: ejecuta el build y los tests del proyecto, audita el cambio con auditores de IA especializados, aplica una política y publica un veredicto que bloquea o habilita el merge.
 
-- El agente de desarrollo **escribe** código.
-- El Quality System **juzga** el código.
-
-### Regla de oro (invariante duro de v1)
-
-El Quality System **nunca** modifica código, hace commits, hace push ni aplica fixes automáticamente. Su output es: detectar → analizar → clasificar → asignar severidad → explicar → proponer solución → comentar en la PR → esperar el push del agente original → re-auditar.
-
-Cualquier feature propuesta que implique escribir en el repositorio auditado viola esta regla. `Plan.md` §31 lista además lo que explícitamente **no** se implementa en v1: auto-fix, Kubernetes, multi-cloud, multi-tenancy complejo, billing, marketplace de plugins, múltiples proveedores LLM.
-
-## Arquitectura
-
-### Flujo end-to-end
+Existe para separar dos estados que normalmente se confunden:
 
 ```
-GitHub PR (opened / synchronize / reopened)
-   → Quality Orchestrator
-   → Detection + Policies + Context
-   → Auditorías IA (paralelas, seleccionadas dinámicamente)
-   → Sandbox Runner (build, tests, E2E, runtime evidence)
-   → Quality Engine (consolida findings)
-   → Policy Engine (decide)
-   → Quality Report → PASS | FAIL
-   → comentario consolidado en la PR
-   → push del agente → nueva auditoría
+DONE       ← lo declara quien hizo el trabajo
+APPROVED   ← lo decide este sistema, desde fuera
 ```
 
-### Módulos (`Plan.md` §28)
+Un agente puede decir "terminé". No puede decir "está aprobado". Por eso el gate vive fuera del agente y ninguno puede saltearlo.
 
-`orchestrator/`, `github-integration/`, `project-service/`, `audit-engine/`, `policy-engine/`, `sandbox-runner/`, `execution-profile/`, `ai-agents/`, `quality-engine/`, `event-bus/`, `persistence/`, `api/`.
+## Invariantes
 
-**Modular monolith con workers separados donde haga falta**, no microservicios desde el primer commit. La separación debe existir conceptualmente (contratos explícitos entre módulos) aunque varios corran en el mismo proceso.
+Romper cualquiera de estos convierte el producto en otra cosa:
 
-### Separaciones de responsabilidad que no deben difuminarse
+1. **El sistema nunca modifica código.** No hay Fix Agent: no commitea, no pushea, no aplica fixes. Detecta, explica, propone y comenta. Quien corrige es el agente que abrió la PR; su push dispara una nueva auditoría. Cualquier feature que implique escribir en el repositorio auditado contradice el diseño.
 
-Estas fronteras son el motivo de que el sistema sea modular; romperlas es el error de diseño más probable:
+2. **El veredicto es aritmética, no criterio de un LLM.** Los auditores producen findings con severidad y `confidence`. El Policy Engine decide con una regla fija: `build ok AND tests ok AND ningún finding bloqueante sobre el umbral de confianza`. Un modelo que dice "en general está bien" no aprueba nada.
 
-1. **Sandbox vs Auditor.** El Sandbox ejecuta y observa: reporta *"esto pasó"* (logs, exit codes, tests fallidos, screenshots). El Auditor interpreta: *"esto significa que hay un problema"*. El Sandbox nunca emite juicios de calidad ni severidades.
+3. **Los auditores son datos, no código.** Cada `agents/*.md` es un contrato (rol, qué revisar, qué no puede aprobar, esquema de salida). `auditor.ts` es genérico. Agregar un auditor es escribir un markdown y una línea de política — si agregar uno exige tocar TypeScript, la abstracción se rompió.
 
-2. **Auditor vs Policy Engine.** Los auditores producen findings con severidad (`CRITICAL`/`HIGH`/`MEDIUM`/`LOW`/`INFO`). El Policy Engine decide qué severidades bloquean la PR, por proyecto y de forma configurable. Nunca hardcodear el criterio de bloqueo dentro de un auditor. Por defecto, una sugerencia estética no bloquea.
+4. **`ERROR` no es `FAIL`.** Si la API se cae o un auditor da timeout, el check queda **neutral y no bloquea**. Un outage de un proveedor no puede frenar los merges del equipo; el primer incidente que lo hiciera llevaría a desactivar el gate.
 
-3. **Orchestrator sin conocimiento de stacks.** El Orchestrator coordina; no contiene lógica específica de Java, Angular, Python, etc. Ese conocimiento vive en detección de stack + Execution Profiles.
+5. **Los falsos positivos son bugs de primera clase.** Un gate que hay que filtrar a mano pierde autoridad y deja de leerse. `confidence` bajo nunca bloquea, y el golden set se corre ante cualquier cambio de prompt.
 
-4. **Auditores modulares, no un agente gigante.** Auditorías iniciales del MVP: Code Quality, Security, Architecture, Tests. Luego Database, Performance, Documentation. Cada auditoría combina Global Rules + Stack Rules + Project Rules bajo la Project Policy.
+## Detalles fáciles de romper
 
-### Selección dinámica de auditorías
+- **Corte escalonado.** Si el build falla → `FAIL` sin llamar a la IA (el error del compilador ya es el mensaje, y quien lo lee es un agente que interpreta stack traces sin ayuda). Si los tests fallan → `FAIL`, pero **siguen corriendo `scope` y `acceptance`**, que no dependen de código funcionando y evitan que el agente itere puliendo algo mal orientado.
 
-No se ejecutan todas siempre. Se decide a partir de archivos modificados, lenguaje, framework, estructura, dependencias, configuración, tipo de cambio y políticas del proyecto. Configuración declarativa por proyecto **+** detección automática (`Plan.md` §5).
+- **El caché exige una llamada en serie primero.** Los auditores comparten casi todo el input. El bloque compartido va primero, con `cache_control`. Pero una llamada no puede leer un caché que otra está escribiendo: hay que disparar un auditor, esperar su primer token, y recién ahí lanzar el resto en paralelo. Sin eso el caché no ahorra nada.
 
-Detección de stack por archivos marcadores: `pom.xml`, `build.gradle`, `package.json`, lockfiles, `requirements.txt`, `pyproject.toml`, `go.mod`, `Cargo.toml`, `Dockerfile`, `docker-compose.yml`. La detección debe ser extensible, nunca acoplada a una sola tecnología.
+- **Un comentario, no veinte.** El comentario lleva un marcador HTML invisible; en cada push se busca y se **edita**, nunca se crea otro. El comentario informa; el **check run** es lo que bloquea el merge.
 
-### Execution Profile
+- **Formato para agentes, no para humanos.** Severidad, `archivo:línea` exacto y qué hacer. Nada de prosa que haya que interpretar.
 
-Contrato por proyecto que declara runtime, servicios auxiliares, comandos (`build`/`test`/`e2e`), límites (cpu/memoria/timeout) y modo de red (`Plan.md` §12). El sistema debe poder detectar el stack, generar un profile inicial, permitir editarlo y persistirlo por proyecto.
+- **`fetch-depth: 0` en el checkout.** Sin el historial completo no se puede calcular el diff de la PR.
 
-## Seguridad del Sandbox (prioridad alta)
+- **PRs desde forks no reciben secrets**, así que no hay `ANTHROPIC_API_KEY` y el gate no corre. Para repos propios con ramas internas no importa. No "resolverlo" con `pull_request_target`: eso ejecuta código no confiable con acceso a los secrets.
 
-El sistema ejecuta **código no confiable proveniente de PRs**. Cualquier cambio en `sandbox-runner/` se evalúa contra `Plan.md` §10 y §27:
+## Stack
 
-- Ejecución efímera, aislada, destruida al terminar; filesystem propio nunca reutilizado entre ejecuciones.
-- Límites obligatorios de CPU, RAM, disco y tiempo.
-- **Red bloqueada por defecto**; los servicios externos se declaran explícitamente en el Execution Profile.
-- Nunca ejecutar en el host. Nunca montar el Docker socket del host dentro del sandbox. Sin privilegios innecesarios. Sin acceso al host. Sin secretos expuestos.
-- Si se reutiliza el `docker-compose.yml` del proyecto auditado, hay que inspeccionarlo y reescribir límites/networking/privilegios antes de levantarlo — no ejecutarlo tal cual.
-- El aislamiento debe poder evolucionar de Docker a VMs/microVMs sin rediseñar el resto.
+TypeScript sobre Node.js. Octokit para GitHub, el SDK de Anthropic para los auditores, Vitest para los tests del propio sistema. Los auditores corren en `claude-sonnet-5`, configurable por auditor en `policy.yaml`.
 
-## Modelo de datos y contratos
-
-- **Trazabilidad**: `Project → Repository → Pull Request → Commit → Audit → Findings + Sandbox Execution + Policy Evaluation`. Cada commit produce su propia auditoría; el historial se conserva.
-- **Re-auditoría**: en `pull_request.synchronize` se re-evalúa el estado actual del commit desde cero. Nunca asumir que un finding previo fue resuelto.
-- **Resultados estructurados, no texto libre**: tanto el resultado del Sandbox como los findings son objetos tipados (severidad, tipo, título, archivo, test, mensaje, evidencia, fix sugerido). Ver los esquemas de ejemplo en `Plan.md` §15 y §18.
-- **Estados** — Audit: `QUEUED`, `RUNNING`, `PASSED`, `FAILED`, `ERROR`, `CANCELLED`, `TIMEOUT`. Sandbox Job: `QUEUED`, `PROVISIONING`, `CLONING`, `INSTALLING`, `BUILDING`, `TESTING`, `E2E`, `COLLECTING`, `COMPLETED`, `FAILED`, `TIMEOUT`, `DESTROYING`.
-- **Concurrencia**: múltiples PRs simultáneas vía job queue. El Orchestrator es asíncrono y nunca bloquea esperando una ejecución de sandbox.
-- **Runtime evidence**: logs, stack traces, test failures, HTTP responses, screenshots/videos de E2E, coverage, build output, artifacts, métricas. Existe para que la IA razone sobre hechos reales, no sólo sobre el código.
-
-## Comentarios en la PR
-
-Un comentario **consolidado** (o comentarios identificables y actualizables) por auditoría. No inundar la PR con cientos de comentarios individuales. Formato de referencia en `Plan.md` §21: estado, cantidad de problemas, y por finding severidad + ubicación + explicación + evidencia + solución sugerida, más el resumen de tests.
-
-## Orden de construcción
-
-`Plan.md` §29 y §33: construir un **vertical slice end-to-end** primero, no todos los módulos en aislamiento.
-
-Slice inicial: `PR → webhook → Orchestrator → Sandbox → build/test → auditoría IA simple → Quality Report → PASS/FAIL → comentario en PR`.
-
-Sólo cuando ese ciclo cierre (incluyendo `push → re-auditoría → PASS`) agregar, en este orden: policies, múltiples auditores, Execution Profiles, E2E, historial, concurrencia, escalabilidad, seguridad avanzada.
-
-Stacks a soportar primero en el sistema auditado: Java/Spring Boot, Node.js, Angular/React, Python, Docker.
+Al escribir código que llame a la API de Anthropic, cargar la skill `claude-api` antes — los IDs de modelo, el precio y la forma de forzar JSON (structured outputs vía `output_config.format`, no tool use) cambian seguido y no deben escribirse de memoria.
 
 ## Idioma
 
-`Plan.md` está en español y el usuario trabaja en español. Mantener la documentación del proyecto en español; identificadores de código y términos técnicos en inglés.
+La documentación del proyecto va en español; identificadores de código y términos técnicos en inglés. Los archivos de `agents/*.md` son prompts para el modelo — escribirlos en inglés.
