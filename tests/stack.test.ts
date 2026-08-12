@@ -15,14 +15,53 @@ afterEach(async () => {
 });
 
 describe('detectStack', () => {
-  it('detecta Node cuando hay package.json con script de test', async () => {
+  it('detecta Node con npm ci cuando hay package-lock.json', async () => {
+    await writeFile(
+      join(dir, 'package.json'),
+      JSON.stringify({ scripts: { build: 'tsc', test: 'vitest run' } }),
+    );
+    await writeFile(join(dir, 'package-lock.json'), '{}');
+    const stack = await detectStack(dir);
+    expect(stack.kind).toBe('node');
+    expect(stack.install).toBe('npm ci');
+    expect(stack.build).toBe('npm run build');
+    expect(stack.test).toBe('npm test');
+  });
+
+  it('detecta Yarn cuando hay yarn.lock y usa sus comandos', async () => {
+    await writeFile(
+      join(dir, 'package.json'),
+      JSON.stringify({ scripts: { build: 'tsc', test: 'vitest run' } }),
+    );
+    await writeFile(join(dir, 'yarn.lock'), '');
+    const stack = await detectStack(dir);
+    expect(stack.kind).toBe('node');
+    expect(stack.install).toBe('yarn install --frozen-lockfile');
+    expect(stack.build).toBe('yarn build');
+    expect(stack.test).toBe('yarn test');
+  });
+
+  it('detecta pnpm cuando hay pnpm-lock.yaml y usa sus comandos', async () => {
+    await writeFile(
+      join(dir, 'package.json'),
+      JSON.stringify({ scripts: { build: 'tsc', test: 'vitest run' } }),
+    );
+    await writeFile(join(dir, 'pnpm-lock.yaml'), '');
+    const stack = await detectStack(dir);
+    expect(stack.kind).toBe('node');
+    expect(stack.install).toBe('pnpm install --frozen-lockfile');
+    expect(stack.build).toBe('pnpm build');
+    expect(stack.test).toBe('pnpm test');
+  });
+
+  it('usa npm install (no npm ci) cuando no hay ningún lockfile', async () => {
     await writeFile(
       join(dir, 'package.json'),
       JSON.stringify({ scripts: { build: 'tsc', test: 'vitest run' } }),
     );
     const stack = await detectStack(dir);
     expect(stack.kind).toBe('node');
-    expect(stack.install).toBe('npm ci');
+    expect(stack.install).toBe('npm install');
     expect(stack.build).toBe('npm run build');
     expect(stack.test).toBe('npm test');
   });

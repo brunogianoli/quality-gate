@@ -11,16 +11,40 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
+interface NodePackageManager {
+  install: string;
+  build: string;
+  test: string;
+}
+
+// `npm ci` exige un package-lock.json presente; sin uno falla de entrada. Un
+// repo con Yarn o pnpm tampoco tiene package-lock.json, así que hay que
+// detectar el gestor por el lockfile que realmente está en el repo en vez de
+// asumir npm para todo lo que tenga package.json.
+async function detectNodePackageManager(dir: string): Promise<NodePackageManager> {
+  if (await exists(join(dir, 'yarn.lock'))) {
+    return { install: 'yarn install --frozen-lockfile', build: 'yarn build', test: 'yarn test' };
+  }
+  if (await exists(join(dir, 'pnpm-lock.yaml'))) {
+    return { install: 'pnpm install --frozen-lockfile', build: 'pnpm build', test: 'pnpm test' };
+  }
+  if (await exists(join(dir, 'package-lock.json'))) {
+    return { install: 'npm ci', build: 'npm run build', test: 'npm test' };
+  }
+  return { install: 'npm install', build: 'npm run build', test: 'npm test' };
+}
+
 export async function detectStack(dir: string): Promise<StackInfo> {
   if (await exists(join(dir, 'package.json'))) {
     const raw = await readFile(join(dir, 'package.json'), 'utf8');
     const pkg = JSON.parse(raw) as { scripts?: Record<string, string> };
     const scripts = pkg.scripts ?? {};
+    const pm = await detectNodePackageManager(dir);
     return {
       kind: 'node',
-      install: 'npm ci',
-      build: scripts['build'] ? 'npm run build' : null,
-      test: scripts['test'] ? 'npm test' : null,
+      install: pm.install,
+      build: scripts['build'] ? pm.build : null,
+      test: scripts['test'] ? pm.test : null,
     };
   }
 
