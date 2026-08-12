@@ -273,4 +273,16 @@ describe('input() / requiredInput() — lectura de inputs de la Action', () => {
     expect(() => requiredInput('anthropic-api-key')).toThrow('Falta el input anthropic-api-key');
     expect(() => requiredInput('github-token')).toThrow('Falta el input github-token');
   });
+
+  it('trata un input vacío como ausente', () => {
+    // El runner exporta INPUT_<NOMBRE> para todo input declarado en action.yml,
+    // aunque el workflow no lo pase: llega como cadena vacía. Devolverla hace
+    // que `?? valorPorDefecto` no se active, y un input opcional que nadie usó
+    // termina pisando el default con ''.
+    process.env['INPUT_GITHUB-TOKEN'] = '';
+    expect(input('github-token')).toBeUndefined();
+
+    process.env['INPUT_GITHUB-TOKEN'] = '   ';
+    expect(input('github-token')).toBeUndefined();
+  });
 });

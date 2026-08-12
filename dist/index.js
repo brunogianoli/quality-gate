@@ -32449,7 +32449,8 @@ function required2(name) {
 }
 var DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic";
 function input(name) {
-  return process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`];
+  const value = process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`];
+  return value?.trim() ? value : void 0;
 }
 function requiredInput(name) {
   const value = input(name);

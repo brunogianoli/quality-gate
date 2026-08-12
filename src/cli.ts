@@ -156,8 +156,13 @@ export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/anthropic';
 // de entorno `INPUT_<NOMBRE>`, en mayúsculas, con los espacios convertidos en
 // guiones bajos — pero los guiones se preservan tal cual. Es el mismo
 // comportamiento que implementa @actions/core.getInput().
+// Un input declarado en action.yml que el workflow no pasa llega igual, como
+// cadena vacía. Devolverla rompe cualquier `input(...) ?? valorPorDefecto`,
+// porque `??` sólo cubre null y undefined: el default nunca se aplica y el
+// valor vacío gana. Vacío es ausente.
 export function input(name: string): string | undefined {
-  return process.env[`INPUT_${name.replace(/ /g, '_').toUpperCase()}`];
+  const value = process.env[`INPUT_${name.replace(/ /g, '_').toUpperCase()}`];
+  return value?.trim() ? value : undefined;
 }
 
 export function requiredInput(name: string): string {

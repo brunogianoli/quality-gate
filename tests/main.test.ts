@@ -117,6 +117,20 @@ describe('main() — construye Anthropic/Octokit con los inputs reales de la Act
     });
   });
 
+  it('ignora api-base-url vacío y sigue apuntando a DeepSeek', async () => {
+    // Encontrado en el runner: GitHub Actions exporta INPUT_<NOMBRE> para todo
+    // input declarado en action.yml aunque el workflow no lo pase, y lo exporta
+    // como cadena vacía. `?? ` no cubre la cadena vacía, así que el baseURL
+    // quedaba en '' y el SDK caía a su default, api.anthropic.com. Los cuatro
+    // auditores fallaban con 401 y la key de DeepSeek parecía la culpable.
+    process.env['INPUT_API-BASE-URL'] = '';
+    await main();
+
+    expect(anthropicCtor.mock.calls[0]?.[0]).toMatchObject({
+      baseURL: 'https://api.deepseek.com/anthropic',
+    });
+  });
+
   it('permite apuntar a otro proveedor compatible con el input api-base-url', async () => {
     process.env['INPUT_API-BASE-URL'] = 'https://ejemplo.interno/anthropic';
     await main();
