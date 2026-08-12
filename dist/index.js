@@ -32397,7 +32397,14 @@ async function runGate(deps) {
       }
     }
     const findings = results.results.flatMap((r) => r.findings);
-    const decision = decide(policy, runner, findings);
+    let decision = decide(policy, runner, findings);
+    if (decision.verdict === "PASS" && names.length > 0 && results.results.length === 0) {
+      decision = {
+        ...decision,
+        verdict: "ERROR",
+        reason: `Ning\xFAn auditor pudo ejecutarse (fallaron los ${names.length} seleccionados). El gate no verific\xF3 este cambio.`
+      };
+    }
     await upsertComment(
       deps.octokit,
       ctx,
@@ -32442,7 +32449,8 @@ function required2(name) {
 }
 var DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic";
 function input(name) {
-  return process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`];
+  const value = process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`];
+  return value?.trim() ? value : void 0;
 }
 function requiredInput(name) {
   const value = input(name);
