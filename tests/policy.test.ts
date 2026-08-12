@@ -1,4 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { decide, loadPolicy } from '../src/policy.js';
 import type { Finding, Policy, RunnerResult } from '../src/types.js';
 
@@ -72,6 +75,18 @@ describe('decide', () => {
     const d = decide(policy, green, [finding('CRITICAL', 0.7)]);
     expect(d.verdict).toBe('FAIL');
   });
+
+  it('con los tres pasos del runner en null, declara honestamente que no se verificó nada en vez de un PASS mudo', () => {
+    const unrun: RunnerResult = { install: null, build: null, test: null };
+    const d = decide(policy, unrun, []);
+    // El veredicto sigue siendo defendible (nada falló), pero el motivo —que
+    // termina tanto en el comentario como en el output.summary del check run—
+    // tiene que decir explícitamente que no hubo verificación real.
+    expect(d.verdict).toBe('PASS');
+    expect(d.reason.toLowerCase()).toContain('no fue reconocido');
+    expect(d.reason).toContain('build');
+    expect(d.reason).toContain('test');
+  });
 });
 
 describe('loadPolicy', () => {
@@ -81,5 +96,39 @@ describe('loadPolicy', () => {
     expect(p.minConfidence).toBe(0.7);
     expect(p.blockOn).toEqual(['CRITICAL', 'HIGH']);
     expect(p.auditors['scope']?.when).toBe('always');
+  });
+
+  describe('override del consumidor (.ai/policy.yaml)', () => {
+    let dir: string;
+
+    beforeEach(async () => {
+      dir = await mkdtemp(join(tmpdir(), 'policy-'));
+      await mkdir(join(dir, '.ai'));
+    });
+
+    afterEach(async () => {
+      await rm(dir, { recursive: true, force: true });
+    });
+
+    it('hereda del default lo que un override válido no pisa', async () => {
+      await writeFile(
+        join(dir, '.ai', 'policy.yaml'),
+        'model: claude-opus-4\nmin_confidence: 0.9\n',
+      );
+      const p = await loadPolicy(dir);
+      // Lo que el override declaró:
+      expect(p.model).toBe('claude-opus-4');
+      expect(p.minConfidence).toBe(0.9);
+      // Lo que no declaró, viene del default del paquete:
+      expect(p.blockOn).toEqual(['CRITICAL', 'HIGH']);
+      expect(p.required).toEqual(['build', 'tests']);
+      expect(p.auditors['scope']?.when).toBe('always');
+    });
+
+    it('lanza con un mensaje comprensible cuando block_on es un string en vez de un array', async () => {
+      await writeFile(join(dir, '.ai', 'policy.yaml'), 'block_on: HIGH\n');
+      await expect(loadPolicy(dir)).rejects.toThrow(/block_on/);
+      await expect(loadPolicy(dir)).rejects.toThrow(/policy\.yaml/);
+    });
   });
 });
