@@ -32086,12 +32086,16 @@ async function runAuditors(deps) {
   const { client, names, prompts, sharedContext, policy } = deps;
   const results = [];
   const errors = [];
-  const attempt = async (name) => {
+  const runnable = [];
+  for (const name of names) {
     const prompt = prompts[name];
-    if (!prompt) {
+    if (prompt) {
+      runnable.push({ name, prompt });
+    } else {
       errors.push(`No se encontr\xF3 el prompt del auditor "${name}" en agents/.`);
-      return;
     }
+  }
+  const attempt = async ({ name, prompt }) => {
     try {
       results.push(await runAuditor({ client, name, prompt, sharedContext, policy }));
     } catch (err) {
@@ -32099,9 +32103,9 @@ async function runAuditors(deps) {
       errors.push(`El auditor "${name}" fall\xF3: ${message}`);
     }
   };
-  const [first, ...rest] = names;
-  if (first === void 0) return { results, errors };
-  await attempt(first);
+  const [primer, ...rest] = runnable;
+  if (primer === void 0) return { results, errors };
+  await attempt(primer);
   await Promise.all(rest.map(attempt));
   return { results, errors };
 }
