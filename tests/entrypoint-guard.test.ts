@@ -39,5 +39,9 @@ describe('el guard de entrypoint no dispara main() al importar el módulo', () =
     const mod = await import('../src/cli.js');
     expect(mod.main).toBeTypeOf('function');
     expect(mod.runGate).toBeTypeOf('function');
-  });
+    // Importa cli.ts de verdad, lo que arrastra el SDK de Anthropic y Octokit
+    // por su cadena de imports. Aislado tarda ~1,6s, pero corriendo junto al
+    // resto de la suite se pasó de los 5s por defecto y falló sin que nada
+    // estuviera roto. El margen es para la carga de la máquina, no para el test.
+  }, 30_000);
 });

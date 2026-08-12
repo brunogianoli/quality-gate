@@ -112,6 +112,49 @@ describe('runGate', () => {
     expect(called.sort()).toEqual(['acceptance', 'scope']);
   });
 
+  it('no cuenta dos veces el defecto que dos auditores reportan igual', async () => {
+    // Visto en la PR #4: `acceptance` y `backend` reportaron el mismo bug con
+    // títulos distintos y una línea de diferencia, y el comentario mostró dos
+    // problemas donde había uno.
+    const anthropic = {
+      messages: {
+        create: vi.fn(async (args: Record<string, unknown>) => {
+          const msgs = args['messages'] as Array<{ content: string }>;
+          const name = /exactamente "([a-z]+)"/.exec(msgs[0]!.content)?.[1] ?? 'x';
+          return {
+            content: [
+              {
+                type: 'tool_use',
+                input: {
+                  auditor: name,
+                  status: 'FAIL',
+                  findings: [
+                    {
+                      severity: 'HIGH',
+                      confidence: name === 'scope' ? 0.95 : 0.85,
+                      title: `mismo defecto, visto por ${name}`,
+                      file: 'src/app.ts',
+                      line: name === 'scope' ? 10 : 11,
+                      message: 'no valida la entrada',
+                      evidence: null,
+                      suggestedFix: null,
+                    },
+                  ],
+                },
+              },
+            ],
+          };
+        }),
+      },
+    } as unknown as LlmClient;
+
+    const d = await runGate(deps({ anthropic }));
+
+    expect(d.verdict).toBe('FAIL');
+    expect(d.blocking).toHaveLength(1);
+    expect(d.blocking[0]?.title).toContain('scope');
+  });
+
   it('no aprueba cuando ningún auditor pudo correr', async () => {
     // Encontrado corriendo el gate de verdad: con la API rechazando la key,
     // los cuatro auditores fallaron y el veredicto salió PASS en verde. Nadie

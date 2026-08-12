@@ -6,6 +6,7 @@ import { selectAuditors } from './analyzer.js';
 import { renderSharedContext, type LlmClient } from './auditor.js';
 import { buildContext, type OctokitLike } from './context.js';
 import { runAuditors } from './orchestrator.js';
+import { dedupeFindings } from './findings.js';
 import { decide, loadPolicy } from './policy.js';
 import { loadPrompts } from './prompts.js';
 import { publishCheck, renderComment, upsertComment, type ReportOctokit } from './report.js';
@@ -79,7 +80,10 @@ export async function runGate(deps: GateDeps): Promise<Decision> {
       }
     }
 
-    const findings = results.results.flatMap((r) => r.findings);
+    // Varios auditores miran el mismo cambio, así que el mismo defecto llega
+    // repetido. Se colapsa antes de decidir para que el conteo de bloqueantes
+    // cuente problemas y no reportes.
+    const findings = dedupeFindings(results.results.flatMap((r) => r.findings));
     let decision = decide(policy, runner, findings);
 
     // Un veredicto verde afirma que alguien miró el cambio. Si se seleccionaron
@@ -156,10 +160,11 @@ export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/anthropic';
 // de entorno `INPUT_<NOMBRE>`, en mayúsculas, con los espacios convertidos en
 // guiones bajos — pero los guiones se preservan tal cual. Es el mismo
 // comportamiento que implementa @actions/core.getInput().
-// Un input declarado en action.yml que el workflow no pasa llega igual, como
-// cadena vacía. Devolverla rompe cualquier `input(...) ?? valorPorDefecto`,
-// porque `??` sólo cubre null y undefined: el default nunca se aplica y el
-// valor vacío gana. Vacío es ausente.
+//
+// Un input declarado que el workflow no pasa llega igual, como cadena vacía.
+// Devolverla rompe cualquier `input(...) ?? valorPorDefecto`, porque `??` sólo
+// cubre null y undefined: el default nunca se aplica y gana el valor vacío.
+// Vacío es ausente.
 export function input(name: string): string | undefined {
   const value = process.env[`INPUT_${name.replace(/ /g, '_').toUpperCase()}`];
   return value?.trim() ? value : undefined;
