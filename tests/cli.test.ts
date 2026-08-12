@@ -49,7 +49,7 @@ function deps(overrides: Partial<GateDeps> = {}): GateDeps {
       },
       checks: { create: vi.fn().mockResolvedValue({}) },
     } as unknown as GateDeps['octokit'],
-    policy,
+    loadPolicy: async () => policy,
     prompts: { acceptance: 'p', scope: 'p', backend: 'p' },
     detect: async () => ({ kind: 'node', install: null, build: 'true', test: 'true' }),
     run: async () => ({
@@ -139,6 +139,55 @@ describe('runGate', () => {
     await runGate(d);
     expect(d.octokit.issues.createComment).toHaveBeenCalledOnce();
     expect(d.octokit.checks.create).toHaveBeenCalledOnce();
+  });
+
+  // Regresión del fix del Problema 4 (loadPolicy ahora valida con zod y
+  // lanza ante un .ai/policy.yaml inválido): esa excepción tiene que
+  // resolverse en el mismo camino que cualquier otro fallo del gate —
+  // ERROR + check neutral + comentario — no escapar de runGate. Si alguien
+  // volviera a sacar `deps.loadPolicy(...)` de adentro del try/catch (p. ej.
+  // reintroduciendo `policy: Policy` ya resuelta en GateDeps), este test
+  // falla: la promesa de runGate rechazaría en vez de resolver con un
+  // veredicto ERROR.
+  it('con un .ai/policy.yaml inválido, devuelve ERROR con check neutral y comentario en vez de lanzar', async () => {
+    const invalidPolicyMessage =
+      'Política inválida en /repo/.ai/policy.yaml: el campo "block_on" no cumple el esquema esperado (Invalid input: expected array, received string). Revisá el YAML.';
+
+    const createComment = vi.fn().mockResolvedValue({});
+    const checksCreate = vi.fn().mockResolvedValue({});
+    const octokit = {
+      pulls: {
+        get: async () => ({ data: { body: 'Closes #9' } }),
+        listFiles: async () => ({ data: [] }),
+      },
+      issues: {
+        get: async () => ({ data: { body: '' } }),
+        listComments: vi.fn().mockResolvedValue({ data: [] }),
+        createComment,
+        updateComment: vi.fn().mockResolvedValue({}),
+      },
+      checks: { create: checksCreate },
+    } as unknown as GateDeps['octokit'];
+
+    const d = await runGate(
+      deps({
+        octokit,
+        loadPolicy: async () => {
+          throw new Error(invalidPolicyMessage);
+        },
+      }),
+    );
+
+    expect(d.verdict).toBe('ERROR');
+    expect(d.reason).toContain('block_on');
+    expect(d.reason).toContain('policy.yaml');
+
+    expect(createComment).toHaveBeenCalledOnce();
+    const commentBody = createComment.mock.calls[0]?.[0].body as string;
+    expect(commentBody).toContain('block_on');
+
+    expect(checksCreate).toHaveBeenCalledOnce();
+    expect(checksCreate.mock.calls[0]?.[0].conclusion).toBe('neutral');
   });
 });
 

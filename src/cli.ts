@@ -21,7 +21,7 @@ export interface GateDeps {
   workspace: string;
   anthropic: AnthropicLike;
   octokit: OctokitLike & ReportOctokit;
-  policy: Policy;
+  loadPolicy: (dir: string) => Promise<Policy>;
   prompts: Record<string, string>;
   detect: (dir: string) => Promise<StackInfo>;
   run: (stack: StackInfo, dir: string) => Promise<RunnerResult>;
@@ -31,6 +31,16 @@ export async function runGate(deps: GateDeps): Promise<Decision> {
   let ctx: AuditContext | null = null;
 
   try {
+    // Carga la política adentro del try/catch a propósito: desde que
+    // loadPolicy() valida el YAML con zod (ver policy.ts), un
+    // .ai/policy.yaml malformado lanza en vez de degradar en silencio. Si
+    // esa llamada quedara afuera —como GateDeps recibía la política ya
+    // construida—, la excepción escaparía de runGate entero y el proceso
+    // moriría con un stack trace en el log en vez del veredicto ERROR con
+    // check neutral y comentario que el spec define para cualquier fallo
+    // del gate (§8).
+    const policy = await deps.loadPolicy(deps.workspace);
+
     const stack = await deps.detect(deps.workspace);
     const runner = await deps.run(stack, deps.workspace);
 
@@ -53,7 +63,7 @@ export async function runGate(deps: GateDeps): Promise<Decision> {
 
     // Corte total ante un build roto: el error del compilador ya es el mensaje.
     if (!buildFailed) {
-      names = selectAuditors(deps.policy, ctx.changedFiles, {
+      names = selectAuditors(policy, ctx.changedFiles, {
         criteriaAvailable: ctx.criteria !== null,
         testsFailed,
       });
@@ -64,13 +74,13 @@ export async function runGate(deps: GateDeps): Promise<Decision> {
           names,
           prompts: deps.prompts,
           sharedContext: renderSharedContext(ctx),
-          policy: deps.policy,
+          policy,
         });
       }
     }
 
     const findings = results.results.flatMap((r) => r.findings);
-    const decision = decide(deps.policy, runner, findings);
+    const decision = decide(policy, runner, findings);
 
     await upsertComment(
       deps.octokit,
@@ -163,7 +173,7 @@ export async function main(): Promise<void> {
     octokit: new Octokit({
       auth: requiredInput('github-token'),
     }) as unknown as OctokitLike & ReportOctokit,
-    policy: await loadPolicy(workspace),
+    loadPolicy,
     prompts: await loadPrompts(),
     detect: detectStack,
     run: runStack,
