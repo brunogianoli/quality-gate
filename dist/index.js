@@ -17256,6 +17256,7 @@ var Octokit2 = Octokit.plugin(requestLog, legacyRestEndpointMethods, paginateRes
 
 // src/cli.ts
 import { readFile as readFile4 } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 
 // src/analyzer.ts
 var PATTERNS = [
@@ -32484,7 +32485,8 @@ async function main() {
   });
   console.log(`Quality Gate: ${decision.verdict} \u2014 ${decision.reason}`);
 }
-if (process.env["GITHUB_ACTIONS"] === "true") {
+var isEntrypoint = process.argv[1] !== void 0 && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isEntrypoint) {
   await main();
 }
 export {

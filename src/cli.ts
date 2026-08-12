@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { Octokit } from '@octokit/rest';
 import { readFile } from 'node:fs/promises';
+import { pathToFileURL } from 'node:url';
 import { selectAuditors } from './analyzer.js';
 import { renderSharedContext, type AnthropicLike } from './auditor.js';
 import { buildContext, type OctokitLike } from './context.js';
@@ -171,6 +172,16 @@ export async function main(): Promise<void> {
   console.log(`Quality Gate: ${decision.verdict} — ${decision.reason}`);
 }
 
-if (process.env['GITHUB_ACTIONS'] === 'true') {
+// GitHub Actions define GITHUB_ACTIONS=true en todos los jobs siempre, no
+// sólo cuando este bundle corre como la Action — así que no sirve para
+// distinguir "me importaron" de "me ejecutaron directamente". El patrón
+// correcto en ESM es comparar la URL de este módulo con el argumento que
+// lanzó el proceso: sólo coinciden cuando node ejecutó este archivo como
+// entrypoint (`node dist/index.js`), no cuando otro módulo (p. ej. un test)
+// lo importa.
+const isEntrypoint =
+  process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+
+if (isEntrypoint) {
   await main();
 }
