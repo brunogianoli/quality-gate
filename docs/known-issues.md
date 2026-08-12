@@ -9,14 +9,6 @@ está en el historial de git de la rama `feat/quality-gate`.
 
 ## Atender pronto
 
-### El fixture no está conectado a ningún test
-
-`fixture/` es un repo Node/TS completo, con sus tests y su build. El spec lo
-define como el banco de pruebas ejecutable del sistema. Pero el golden set usa
-objetos `RunnerResult` escritos a mano y **nunca invoca `detectStack` ni
-`runStack` sobre el fixture**. Hoy es decoración: nada verifica que el gate
-funcione de punta a punta contra un repositorio real, ni siquiera uno de juguete.
-
 ### La política se valida, pero el timeout y el reintento son los del SDK
 
 El spec pide timeout por auditor y un reintento con backoff. No están
@@ -59,9 +51,11 @@ Fallan hacia el lado seguro o su impacto es acotado.
 ## Lo que falta de verdad
 
 Nada de lo anterior es lo más importante. **El sistema nunca habló con la API de
-Anthropic ni con GitHub.** Los 112 tests corren con ambas mockeadas, que es lo
-correcto para una suite unitaria, pero significa que sabemos que las piezas
-encajan entre sí, no que funcionan contra el mundo real.
+Anthropic ni con GitHub.** Los 112 tests de `npm test` corren con ambas
+mockeadas, que es lo correcto para una suite unitaria. Los de integración sí
+ejecutan un repositorio real, pero sólo la mitad determinista del gate: detectar
+el stack, correr build y tests, y calcular el veredicto. Los auditores —la parte
+que define si esto sirve— siguen sin haberse ejecutado nunca de verdad.
 
 El criterio de éxito del spec sigue sin cumplirse: abrir una PR de verdad en el
 repositorio fixture, ver el gate correr solo, comentar el `FAIL`, y que un push
@@ -81,3 +75,10 @@ que es la única pregunta que define si este sistema sirve.
   tenía prompt, el turno de cebado se gastaba en un auditor que nunca llamaba a
   la API. `runAuditors` ahora descarta primero los auditores sin prompt y le da
   el turno al primero que sí lo tiene.
+- **El fixture no estaba conectado a ningún test.** `tests/integration/fixture.test.ts`
+  lo copia a un directorio temporal y corre el pipeline determinista de verdad
+  (`detectStack` → `runStack` → `decide`) en tres escenarios: el fixture sano
+  (`PASS`), con un bug de runtime en `divide` (compila, tests en rojo, `FAIL`) y
+  con un error de tipos (corta en el build sin llegar a los tests, `FAIL`).
+  Necesita red y tarda ~1 minuto, así que corre con `npm run test:integration` y
+  en su propio job de CI, fuera de `npm test`.

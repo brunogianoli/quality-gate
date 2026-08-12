@@ -6,7 +6,20 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 El diseño está aprobado y documentado en `docs/superpowers/specs/2026-08-11-quality-gate-design.md`. **Ese spec es la fuente de verdad** — este archivo resume lo que hace falta saber antes de tocar código y señala los invariantes que se rompen con facilidad.
 
-Todavía no hay código: el paquete Node no está inicializado, así que no hay comandos de build, test ni lint. Cuando se inicialice, actualizar esta sección con los comandos reales, incluido cómo correr un test individual.
+El sistema está implementado y la suite pasa. Comandos:
+
+```bash
+npm test                    # suite unitaria: sin red, ~8s
+npm test -- tests/policy.test.ts   # un solo archivo
+npm test -- -t "decide"     # los tests cuyo nombre matchea
+npm run test:integration    # corre el gate contra fixture/ de verdad: red, ~1min
+npm run typecheck           # tsc --noEmit
+npm run build               # regenera dist/index.js (va commiteado)
+```
+
+`dist/index.js` es el bundle que ejecuta la Action y **está commiteado**: cada vez que cambie algo de `src/`, hay que correr `npm run build` y commitear el bundle, o el CI falla en el paso `git diff --exit-code dist/`.
+
+Los problemas conocidos que quedaron sin resolver están en `docs/known-issues.md`.
 
 `Plan.md` es material de referencia: la conversación exploratoria de la que salió la idea. El spec la reemplaza en todo punto donde difieran.
 
