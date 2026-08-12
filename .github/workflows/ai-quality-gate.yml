@@ -1,0 +1,28 @@
+name: AI Quality Gate
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: quality-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # necesario para calcular el diff de la PR
+      # `./` en vez de `brunogianoli/quality-gate@v1`: el repo se audita con la
+      # Action de su propio checkout, así cada PR prueba el código de esa PR y
+      # no hace falta taguear una release para cada cambio.
+      - uses: ./
+        with:
+          deepseek-api-key: ${{ secrets.DEEPSEEK_API_KEY }}

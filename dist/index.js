@@ -32122,11 +32122,21 @@ import { readdir, readFile as readFile2 } from "node:fs/promises";
 import { join as join2, dirname as dirname2, basename } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 var here2 = dirname2(fileURLToPath2(import.meta.url));
+var SHARED_PREFIX = "_";
 async function loadPrompts() {
   const dir = join2(here2, "..", "agents");
   const files = (await readdir(dir)).filter((f) => f.endsWith(".md"));
+  const sharedFiles = files.filter((f) => f.startsWith(SHARED_PREFIX)).sort();
+  const shared = (await Promise.all(sharedFiles.map((f) => readFile2(join2(dir, f), "utf8")))).join("\n\n");
+  const auditors = files.filter((f) => !f.startsWith(SHARED_PREFIX));
   const entries = await Promise.all(
-    files.map(async (f) => [basename(f, ".md"), await readFile2(join2(dir, f), "utf8")])
+    auditors.map(async (f) => {
+      const own = await readFile2(join2(dir, f), "utf8");
+      const text = shared ? `${own.trimEnd()}
+
+${shared}` : own;
+      return [basename(f, ".md"), text];
+    })
   );
   return Object.fromEntries(entries);
 }
@@ -32397,7 +32407,14 @@ async function runGate(deps) {
       }
     }
     const findings = results.results.flatMap((r) => r.findings);
-    const decision = decide(policy, runner, findings);
+    let decision = decide(policy, runner, findings);
+    if (decision.verdict === "PASS" && names.length > 0 && results.results.length === 0) {
+      decision = {
+        ...decision,
+        verdict: "ERROR",
+        reason: `Ning\xFAn auditor pudo ejecutarse (fallaron los ${names.length} seleccionados). El gate no verific\xF3 este cambio.`
+      };
+    }
     await upsertComment(
       deps.octokit,
       ctx,
@@ -32442,7 +32459,8 @@ function required2(name) {
 }
 var DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic";
 function input(name) {
-  return process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`];
+  const value = process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`];
+  return value?.trim() ? value : void 0;
 }
 function requiredInput(name) {
   const value = input(name);

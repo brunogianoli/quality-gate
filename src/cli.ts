@@ -80,7 +80,24 @@ export async function runGate(deps: GateDeps): Promise<Decision> {
     }
 
     const findings = results.results.flatMap((r) => r.findings);
-    const decision = decide(policy, runner, findings);
+    let decision = decide(policy, runner, findings);
+
+    // Un veredicto verde afirma que alguien miró el cambio. Si se seleccionaron
+    // auditores y ninguno pudo ejecutarse, nadie lo miró: aprobar ahí es
+    // exactamente el "APPROVED sin verificar" que el gate existe para impedir.
+    // Degrada a ERROR, que deja el check neutral y no bloquea el merge — un
+    // outage del proveedor no puede frenar al equipo, pero tampoco puede
+    // hacerse pasar por una aprobación.
+    //
+    // Sólo se degrada un PASS: un FAIL por build, tests o findings se sostiene
+    // con evidencia propia y perderlo desbloquearía un merge que debía frenarse.
+    if (decision.verdict === 'PASS' && names.length > 0 && results.results.length === 0) {
+      decision = {
+        ...decision,
+        verdict: 'ERROR',
+        reason: `Ningún auditor pudo ejecutarse (fallaron los ${names.length} seleccionados). El gate no verificó este cambio.`,
+      };
+    }
 
     await upsertComment(
       deps.octokit,
@@ -139,8 +156,13 @@ export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/anthropic';
 // de entorno `INPUT_<NOMBRE>`, en mayúsculas, con los espacios convertidos en
 // guiones bajos — pero los guiones se preservan tal cual. Es el mismo
 // comportamiento que implementa @actions/core.getInput().
+// Un input declarado en action.yml que el workflow no pasa llega igual, como
+// cadena vacía. Devolverla rompe cualquier `input(...) ?? valorPorDefecto`,
+// porque `??` sólo cubre null y undefined: el default nunca se aplica y el
+// valor vacío gana. Vacío es ausente.
 export function input(name: string): string | undefined {
-  return process.env[`INPUT_${name.replace(/ /g, '_').toUpperCase()}`];
+  const value = process.env[`INPUT_${name.replace(/ /g, '_').toUpperCase()}`];
+  return value?.trim() ? value : undefined;
 }
 
 export function requiredInput(name: string): string {
