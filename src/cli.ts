@@ -80,7 +80,24 @@ export async function runGate(deps: GateDeps): Promise<Decision> {
     }
 
     const findings = results.results.flatMap((r) => r.findings);
-    const decision = decide(policy, runner, findings);
+    let decision = decide(policy, runner, findings);
+
+    // Un veredicto verde afirma que alguien miró el cambio. Si se seleccionaron
+    // auditores y ninguno pudo ejecutarse, nadie lo miró: aprobar ahí es
+    // exactamente el "APPROVED sin verificar" que el gate existe para impedir.
+    // Degrada a ERROR, que deja el check neutral y no bloquea el merge — un
+    // outage del proveedor no puede frenar al equipo, pero tampoco puede
+    // hacerse pasar por una aprobación.
+    //
+    // Sólo se degrada un PASS: un FAIL por build, tests o findings se sostiene
+    // con evidencia propia y perderlo desbloquearía un merge que debía frenarse.
+    if (decision.verdict === 'PASS' && names.length > 0 && results.results.length === 0) {
+      decision = {
+        ...decision,
+        verdict: 'ERROR',
+        reason: `Ningún auditor pudo ejecutarse (fallaron los ${names.length} seleccionados). El gate no verificó este cambio.`,
+      };
+    }
 
     await upsertComment(
       deps.octokit,

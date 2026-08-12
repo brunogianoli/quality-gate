@@ -32397,7 +32397,14 @@ async function runGate(deps) {
       }
     }
     const findings = results.results.flatMap((r) => r.findings);
-    const decision = decide(policy, runner, findings);
+    let decision = decide(policy, runner, findings);
+    if (decision.verdict === "PASS" && names.length > 0 && results.results.length === 0) {
+      decision = {
+        ...decision,
+        verdict: "ERROR",
+        reason: `Ning\xFAn auditor pudo ejecutarse (fallaron los ${names.length} seleccionados). El gate no verific\xF3 este cambio.`
+      };
+    }
     await upsertComment(
       deps.octokit,
       ctx,
