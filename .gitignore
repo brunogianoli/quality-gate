@@ -1,0 +1,9 @@
+node_modules/
+*.log
+
+# Keys para pruebas locales. En CI la key va como secret del repositorio,
+# nunca en un archivo.
+.env
+
+# Scripts de sondeo contra la API, descartables.
+sondeo*

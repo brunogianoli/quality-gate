@@ -63,7 +63,7 @@ policies/default.yaml
 fixture/             repo de prueba Node/TS
 ```
 
-**Stack:** TypeScript sobre Node.js. Octokit para GitHub, el SDK de Anthropic para los auditores, Vitest para los tests del propio sistema.
+**Stack:** TypeScript sobre Node.js. Octokit para GitHub, Vitest para los tests del propio sistema. Los auditores corren contra **DeepSeek**, usando el SDK `@anthropic-ai/sdk` apuntado a su endpoint compatible (`https://api.deepseek.com/anthropic`). Ese endpoint no implementa structured outputs por esquema —los acepta y los ignora—, así que la estructura de los findings se fuerza con *tool use* obligatorio en vez de `output_config.format`.
 
 **Los auditores son datos, no código.** Cada `agents/*.md` contiene rol, qué revisar, qué no puede aprobar y el esquema de salida. `auditor.ts` es genérico: recibe un `.md` y un contexto, devuelve findings. Agregar un auditor de frontend es escribir un markdown, no tocar TypeScript.
 
@@ -91,12 +91,12 @@ jobs:
         with: { fetch-depth: 0 }        # el diff completo necesita el historial
       - uses: brunogianoli/quality-gate@v1
         with:
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          deepseek-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
 
 ### Limitación conocida
 
-Las PRs que vienen de un *fork* no reciben secrets, así que `ANTHROPIC_API_KEY` no está disponible y el gate no puede correr. Para repos propios con ramas internas no es un problema. Abrir a contribuciones externas requiere una solución aparte y cuidadosa: `pull_request_target` ejecuta código no confiable con acceso a los secrets, así que no es la respuesta obvia que parece.
+Las PRs que vienen de un *fork* no reciben secrets, así que `DEEPSEEK_API_KEY` no está disponible y el gate no puede correr. Para repos propios con ramas internas no es un problema. Abrir a contribuciones externas requiere una solución aparte y cuidadosa: `pull_request_target` ejecuta código no confiable con acceso a los secrets, así que no es la respuesta obvia que parece.
 
 ## 4. Flujo de una PR
 
@@ -190,7 +190,7 @@ Cada auditor devuelve JSON forzado por esquema mediante structured outputs (`out
 
 ```yaml
 # policies/default.yaml
-model: claude-sonnet-5           # configurable por auditor
+model: deepseek-chat            # configurable por auditor
 
 required: [build, tests]
 
@@ -266,7 +266,14 @@ Además: timeout por auditor, un reintento con backoff, y `concurrency: cancel-i
 
 ## 9. Costo
 
-Modelo `claude-sonnet-5` ($3 por millón de tokens de entrada, $15 de salida; precio introductorio de $2/$10 hasta el 31 de agosto de 2026).
+> **Desactualizado.** Las cifras de abajo se calcularon con `claude-sonnet-5`
+> ($3 por millón de tokens de entrada, $15 de salida). El proveedor pasó a ser
+> DeepSeek (`deepseek-chat`), bastante más barato, así que el total real es
+> menor — falta rehacer la cuenta con los precios vigentes. Lo que **sí** se
+> verificó contra la API es que el caché funciona igual: una segunda llamada con
+> el mismo prefijo bajó de 4.419 a 67 tokens de entrada, con 4.352 leídos de
+> caché. La estructura del cálculo y la restricción de implementación siguen
+> valiendo.
 
 Una PR de ~300 líneas:
 

@@ -1,0 +1,9 @@
+# dist/index.js es un artefacto generado por esbuild, no código fuente. Se
+# commitea porque una JavaScript Action lo necesita en el repo (el runner de
+# GitHub no corre `npm install`), y el paso de CI que lo protege
+# (`git diff --exit-code dist/`) sólo es confiable si el archivo nunca sufre
+# normalización de fin de línea, sin importar el `core.autocrlf` de quien lo
+# haya commiteado o el del runner que lo verifica. `-text` lo marca como
+# opaco: git no lo toca al hacer checkout ni al commitear, ni intenta
+# reinterpretarlo como texto al diffear.
+dist/index.js -text

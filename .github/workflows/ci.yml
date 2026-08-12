@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: El bundle commiteado está actualizado
+        run: git diff --exit-code dist/
+
+  # Corre el gate contra el repositorio de `fixture/`: instala sus dependencias,
+  # lo compila y ejecuta sus tests de verdad. Va en un job aparte porque necesita
+  # red y tarda ~1 minuto, y no tiene por qué demorar el feedback de la suite
+  # rápida.
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run test:integration

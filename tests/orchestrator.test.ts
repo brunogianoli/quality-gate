@@ -1,0 +1,202 @@
+import { describe, it, expect, vi } from 'vitest';
+import { runAuditors } from '../src/orchestrator.js';
+import type { LlmClient } from '../src/auditor.js';
+import type { Policy } from '../src/types.js';
+
+// Nota de implementación: runAuditor() (src/auditor.ts, tarea 7) construye el mensaje de
+// usuario como `Tu campo "auditor" debe ser exactamente "${name}"`. La palabra literal
+// "auditor" siempre aparece citada ANTES del nombre real, así que tomar la PRIMERA
+// coincidencia entre comillas (como en el brief original) capturaría siempre "auditor" en
+// vez del auditor real. Tomamos la ÚLTIMA coincidencia, que es la que corresponde a
+// `${name}` en el mensaje real. Ver task-8-report.md para el detalle de esta desviación.
+
+const policy: Policy = {
+  model: 'claude-sonnet-5',
+  required: ['build', 'tests'],
+  blockOn: ['CRITICAL', 'HIGH'],
+  minConfidence: 0.7,
+  timeoutMs: 5 * 60 * 1000,
+  maxRetries: 1,
+  onTestFailure: { runAuditors: [] },
+  auditors: { scope: { when: 'always' }, backend: { when: 'always' }, security: { when: 'always' } },
+};
+
+const prompts = { scope: 'p-scope', backend: 'p-backend', security: 'p-security' };
+
+function clientReturning(status: 'PASS' | 'FAIL' = 'PASS'): { client: LlmClient; order: string[] } {
+  const order: string[] = [];
+  const client = {
+    messages: {
+      create: vi.fn(async (args: Record<string, unknown>) => {
+        const msgs = args['messages'] as Array<{ content: string }>;
+        const matches = [...msgs[0]!.content.matchAll(/"([a-z]+)"/g)];
+        const name = matches.at(-1)?.[1] ?? 'unknown';
+        order.push(name);
+        await new Promise((r) => setTimeout(r, 5));
+        return { content: [{ type: 'tool_use', input: { auditor: name, status, findings: [] } }] };
+      }),
+    },
+  } as unknown as LlmClient;
+  return { client, order };
+}
+
+describe('runAuditors', () => {
+  it('devuelve un resultado por auditor', async () => {
+    const { client } = clientReturning();
+    const { results, errors } = await runAuditors({
+      client,
+      names: ['scope', 'backend', 'security'],
+      prompts,
+      sharedContext: 'ctx',
+      policy,
+    });
+    expect(results).toHaveLength(3);
+    expect(errors).toHaveLength(0);
+    expect(results.map((r) => r.auditor).sort()).toEqual(['backend', 'scope', 'security']);
+  });
+
+  it('ejecuta el primero en serie antes de lanzar el resto', async () => {
+    // La aserción vive ACÁ, en el cuerpo del test, después del await — no dentro del
+    // mock. Si viviera dentro del mock (como en una versión anterior de este test), un
+    // throw ahí adentro viaja como rechazo de promesa a través de runAuditor y lo
+    // absorbe el try/catch de attempt() en orchestrator.ts, que lo convierte en una
+    // entrada de `errors` en vez de tumbar el test. El test nunca inspeccionaba
+    // `errors`, así que una implementación totalmente paralela
+    // (`Promise.all(names.map(attempt))`, sin serializar nada) pasaba igual: la única
+    // aserción que sí llegaba al nivel del test (`started[0] === 'scope'`) se cumplía
+    // por el orden síncrono de Array.prototype.map(), estuviera o no serializada la
+    // ejecución real. Confirmado con mutation testing — ver task-8-report.md.
+    const events: Array<{ auditor: string; fase: 'inicio' | 'fin' }> = [];
+    const client = {
+      messages: {
+        create: vi.fn(async (args: Record<string, unknown>) => {
+          const msgs = args['messages'] as Array<{ content: string }>;
+          const matches = [...msgs[0]!.content.matchAll(/"([a-z]+)"/g)];
+          const name = matches.at(-1)?.[1] ?? 'unknown';
+          events.push({ auditor: name, fase: 'inicio' });
+          await new Promise((r) => setTimeout(r, 10));
+          events.push({ auditor: name, fase: 'fin' });
+          return { content: [{ type: 'tool_use', input: { auditor: name, status: 'PASS', findings: [] } }] };
+        }),
+      },
+    } as unknown as LlmClient;
+
+    await runAuditors({ client, names: ['scope', 'backend', 'security'], prompts, sharedContext: 'c', policy });
+
+    const firstFinIndex = events.findIndex((e) => e.auditor === 'scope' && e.fase === 'fin');
+    const otherStartIndexes = events
+      .map((e, i) => ({ ...e, i }))
+      .filter((e) => e.auditor !== 'scope' && e.fase === 'inicio')
+      .map((e) => e.i);
+
+    // El primer auditor tiene que existir y haber terminado.
+    expect(firstFinIndex).toBeGreaterThanOrEqual(0);
+    // Los otros dos auditores tienen que haber arrancado.
+    expect(otherStartIndexes).toHaveLength(2);
+    // Y ninguno de ellos puede haber arrancado antes de que el primero terminara.
+    for (const startIndex of otherStartIndexes) {
+      expect(startIndex).toBeGreaterThan(firstFinIndex);
+    }
+  });
+
+  it('acumula el error de un auditor sin perder los demás resultados', async () => {
+    const client = {
+      messages: {
+        create: vi.fn(async (args: Record<string, unknown>) => {
+          const msgs = args['messages'] as Array<{ content: string }>;
+          const matches = [...msgs[0]!.content.matchAll(/"([a-z]+)"/g)];
+          const name = matches.at(-1)?.[1] ?? 'unknown';
+          if (name === 'backend') throw new Error('503 overloaded');
+          return { content: [{ type: 'tool_use', input: { auditor: name, status: 'PASS', findings: [] } }] };
+        }),
+      },
+    } as unknown as LlmClient;
+
+    const { results, errors } = await runAuditors({
+      client,
+      names: ['scope', 'backend', 'security'],
+      prompts,
+      sharedContext: 'c',
+      policy,
+    });
+
+    expect(results).toHaveLength(2);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('backend');
+    expect(errors[0]).toContain('503');
+  });
+
+  it('devuelve vacío sin auditores', async () => {
+    const { client } = clientReturning();
+    const { results } = await runAuditors({ client, names: [], prompts, sharedContext: 'c', policy });
+    expect(results).toHaveLength(0);
+  });
+
+  it('registra un error si falta el prompt de un auditor', async () => {
+    const { client } = clientReturning();
+    const { results, errors } = await runAuditors({
+      client,
+      names: ['scope', 'fantasma'],
+      prompts,
+      sharedContext: 'c',
+      policy,
+    });
+    expect(results).toHaveLength(1);
+    expect(errors[0]).toContain('fantasma');
+  });
+
+  it('ceba el caché con el primer auditor que SÍ tiene prompt, no con el primero de la lista', async () => {
+    // Quién ceba el caché no puede decidirse por la posición en el array: un
+    // auditor sin prompt retorna sin invocar runAuditor, así que no hay llamada
+    // a la API y nadie escribe el bloque compartido. Si el turno de cebado se
+    // gasta ahí, el resto sale en paralelo pagando la escritura completa cada
+    // uno — justo el gasto que este módulo existe para evitar.
+    const events: Array<{ auditor: string; fase: 'inicio' | 'fin' }> = [];
+    const client = {
+      messages: {
+        create: vi.fn(async (args: Record<string, unknown>) => {
+          const msgs = args['messages'] as Array<{ content: string }>;
+          const matches = [...msgs[0]!.content.matchAll(/"([a-z]+)"/g)];
+          const name = matches.at(-1)?.[1] ?? 'unknown';
+          events.push({ auditor: name, fase: 'inicio' });
+          await new Promise((r) => setTimeout(r, 10));
+          events.push({ auditor: name, fase: 'fin' });
+          return { content: [{ type: 'tool_use', input: { auditor: name, status: 'PASS', findings: [] } }] };
+        }),
+      },
+    } as unknown as LlmClient;
+
+    const { results, errors } = await runAuditors({
+      client,
+      names: ['fantasma', 'backend', 'security'],
+      prompts,
+      sharedContext: 'c',
+      policy,
+    });
+
+    // El auditor sin prompt no llega a invocar a la API: solo hay 2 resultados y 1 error.
+    expect(results).toHaveLength(2);
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toContain('fantasma');
+
+    // `backend` es el primero con prompt: tiene que haber terminado antes de
+    // que `security` arranque.
+    const backendFinIndex = events.findIndex((e) => e.auditor === 'backend' && e.fase === 'fin');
+    const securityStartIndex = events.findIndex((e) => e.auditor === 'security' && e.fase === 'inicio');
+    expect(backendFinIndex).toBeGreaterThanOrEqual(0);
+    expect(securityStartIndex).toBeGreaterThan(backendFinIndex);
+  });
+
+  it('no rompe si ningún auditor tiene prompt', async () => {
+    const { client } = clientReturning();
+    const { results, errors } = await runAuditors({
+      client,
+      names: ['fantasma', 'espectro'],
+      prompts,
+      sharedContext: 'c',
+      policy,
+    });
+    expect(results).toHaveLength(0);
+    expect(errors).toHaveLength(2);
+  });
+});
