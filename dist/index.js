@@ -31998,24 +31998,32 @@ ${f.patch}`).join("\n\n");
 async function runAuditor(deps) {
   const { client, name, prompt, sharedContext, policy } = deps;
   const cfg = policy.auditors[name];
-  const response = await client.messages.parse({
-    model: cfg?.model ?? policy.model,
-    max_tokens: 16e3,
-    output_config: {
-      effort: cfg?.effort ?? "high",
-      format: zodOutputFormat(AuditorResultSchema)
+  const response = await client.messages.parse(
+    {
+      model: cfg?.model ?? policy.model,
+      max_tokens: 16e3,
+      output_config: {
+        effort: cfg?.effort ?? "high",
+        format: zodOutputFormat(AuditorResultSchema)
+      },
+      system: [
+        { type: "text", text: sharedContext, cache_control: { type: "ephemeral" } },
+        { type: "text", text: prompt }
+      ],
+      messages: [
+        {
+          role: "user",
+          content: `Audit\xE1 este cambio siguiendo tu contrato. Tu campo "auditor" debe ser exactamente "${name}".`
+        }
+      ]
     },
-    system: [
-      { type: "text", text: sharedContext, cache_control: { type: "ephemeral" } },
-      { type: "text", text: prompt }
-    ],
-    messages: [
-      {
-        role: "user",
-        content: `Audit\xE1 este cambio siguiendo tu contrato. Tu campo "auditor" debe ser exactamente "${name}".`
-      }
-    ]
-  });
+    // El SDK reintenta 429 y 5xx con backoff exponencial; declararlo acá hace
+    // que los valores salgan de la política y no de sus defaults.
+    {
+      timeout: cfg?.timeoutMs ?? policy.timeoutMs,
+      maxRetries: cfg?.maxRetries ?? policy.maxRetries
+    }
+  );
   const parsed = AuditorResultSchema.safeParse(response.parsed_output);
   if (!parsed.success) {
     throw new Error(`El auditor ${name} devolvi\xF3 una respuesta inv\xE1lida: ${parsed.error.message}`);
@@ -32127,13 +32135,17 @@ var TriggerSchema = external_exports.enum([
 var AuditorPolicySchema = external_exports.object({
   when: external_exports.union([external_exports.literal("always"), external_exports.literal("criteria_available"), external_exports.array(TriggerSchema)]),
   effort: external_exports.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
-  model: external_exports.string().optional()
+  model: external_exports.string().optional(),
+  timeout_ms: external_exports.number().int().positive().optional(),
+  max_retries: external_exports.number().int().min(0).optional()
 });
 var RawPolicySchema = external_exports.object({
   model: external_exports.string().optional(),
   required: external_exports.array(external_exports.enum(["build", "tests"])).optional(),
   block_on: external_exports.array(external_exports.enum(SEVERITIES)).optional(),
   min_confidence: external_exports.number().min(0).max(1).optional(),
+  timeout_ms: external_exports.number().int().positive().optional(),
+  max_retries: external_exports.number().int().min(0).optional(),
   on_test_failure: external_exports.object({ run_auditors: external_exports.array(external_exports.string()).optional() }).optional(),
   auditors: external_exports.record(external_exports.string(), AuditorPolicySchema).optional()
 });
@@ -32150,16 +32162,31 @@ function parsePolicy(source, label) {
   }
   return result.data;
 }
+function normalizeAuditors(raw) {
+  const auditors = {};
+  for (const [name, cfg] of Object.entries(raw ?? {})) {
+    auditors[name] = {
+      when: cfg.when,
+      effort: cfg.effort,
+      model: cfg.model,
+      timeoutMs: cfg.timeout_ms,
+      maxRetries: cfg.max_retries
+    };
+  }
+  return auditors;
+}
 function normalize(raw, base) {
   return {
     model: raw.model ?? base?.model ?? "claude-sonnet-5",
     required: raw.required ?? base?.required ?? ["build", "tests"],
     blockOn: raw.block_on ?? base?.blockOn ?? ["CRITICAL", "HIGH"],
     minConfidence: raw.min_confidence ?? base?.minConfidence ?? 0.7,
+    timeoutMs: raw.timeout_ms ?? base?.timeoutMs ?? 5 * 60 * 1e3,
+    maxRetries: raw.max_retries ?? base?.maxRetries ?? 1,
     onTestFailure: {
       runAuditors: raw.on_test_failure?.run_auditors ?? base?.onTestFailure.runAuditors ?? []
     },
-    auditors: raw.auditors ?? base?.auditors ?? {}
+    auditors: raw.auditors ? normalizeAuditors(raw.auditors) : base?.auditors ?? {}
   };
 }
 async function loadPolicy(repoDir) {
