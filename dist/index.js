@@ -7650,11 +7650,6 @@ var safeJSON = (text) => {
     return void 0;
   }
 };
-var pop = (obj, key) => {
-  const value = obj[key];
-  delete obj[key];
-  return value;
-};
 
 // node_modules/@anthropic-ai/sdk/internal/utils/sleep.mjs
 var sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -17294,103 +17289,6 @@ function selectAuditors(policy, files, opts) {
   if (!opts.testsFailed) return applicable;
   const allowed = new Set(policy.onTestFailure.runAuditors);
   return applicable.filter((name) => allowed.has(name));
-}
-
-// node_modules/@anthropic-ai/sdk/lib/transform-json-schema.mjs
-var SUPPORTED_STRING_FORMATS = /* @__PURE__ */ new Set([
-  "date-time",
-  "time",
-  "date",
-  "duration",
-  "email",
-  "hostname",
-  "uri",
-  "ipv4",
-  "ipv6",
-  "uuid"
-]);
-function deepClone(obj) {
-  return JSON.parse(JSON.stringify(obj));
-}
-function transformJSONSchema(jsonSchema) {
-  const workingCopy = deepClone(jsonSchema);
-  return _transformJSONSchema(workingCopy);
-}
-function _transformJSONSchema(jsonSchema) {
-  const strictSchema = {};
-  const ref = pop(jsonSchema, "$ref");
-  if (ref !== void 0) {
-    strictSchema["$ref"] = ref;
-    return strictSchema;
-  }
-  const defs = pop(jsonSchema, "$defs");
-  if (defs !== void 0) {
-    const strictDefs = {};
-    strictSchema["$defs"] = strictDefs;
-    for (const [name, defSchema] of Object.entries(defs)) {
-      strictDefs[name] = _transformJSONSchema(defSchema);
-    }
-  }
-  const type = pop(jsonSchema, "type");
-  const anyOf = pop(jsonSchema, "anyOf");
-  const oneOf = pop(jsonSchema, "oneOf");
-  const allOf = pop(jsonSchema, "allOf");
-  if (Array.isArray(anyOf)) {
-    strictSchema["anyOf"] = anyOf.map((variant) => _transformJSONSchema(variant));
-  } else if (Array.isArray(oneOf)) {
-    strictSchema["anyOf"] = oneOf.map((variant) => _transformJSONSchema(variant));
-  } else if (Array.isArray(allOf)) {
-    strictSchema["allOf"] = allOf.map((entry) => _transformJSONSchema(entry));
-  } else {
-    if (type === void 0) {
-      throw new Error("JSON schema must have a type defined if anyOf/oneOf/allOf are not used");
-    }
-    strictSchema["type"] = type;
-  }
-  const description = pop(jsonSchema, "description");
-  if (description !== void 0) {
-    strictSchema["description"] = description;
-  }
-  const title = pop(jsonSchema, "title");
-  if (title !== void 0) {
-    strictSchema["title"] = title;
-  }
-  if (type === "object") {
-    const properties = pop(jsonSchema, "properties") || {};
-    strictSchema["properties"] = Object.fromEntries(Object.entries(properties).map(([key, propSchema]) => [
-      key,
-      _transformJSONSchema(propSchema)
-    ]));
-    pop(jsonSchema, "additionalProperties");
-    strictSchema["additionalProperties"] = false;
-    const required3 = pop(jsonSchema, "required");
-    if (required3 !== void 0) {
-      strictSchema["required"] = required3;
-    }
-  } else if (type === "string") {
-    const format = pop(jsonSchema, "format");
-    if (format !== void 0 && SUPPORTED_STRING_FORMATS.has(format)) {
-      strictSchema["format"] = format;
-    } else if (format !== void 0) {
-      jsonSchema["format"] = format;
-    }
-  } else if (type === "array") {
-    const items = pop(jsonSchema, "items");
-    if (items !== void 0) {
-      strictSchema["items"] = _transformJSONSchema(items);
-    }
-    const minItems = pop(jsonSchema, "minItems");
-    if (minItems !== void 0 && (minItems === 0 || minItems === 1)) {
-      strictSchema["minItems"] = minItems;
-    } else if (minItems !== void 0) {
-      jsonSchema["minItems"] = minItems;
-    }
-  }
-  if (Object.keys(jsonSchema).length > 0) {
-    const existingDescription = strictSchema["description"];
-    strictSchema["description"] = (existingDescription ? existingDescription + "\n\n" : "") + "{" + Object.entries(jsonSchema).map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join(", ") + "}";
-  }
-  return strictSchema;
 }
 
 // node_modules/zod/v4/classic/external.js
@@ -31907,37 +31805,6 @@ function date4(params) {
 // node_modules/zod/v4/classic/external.js
 config(en_default());
 
-// node_modules/@anthropic-ai/sdk/helpers/zod.mjs
-function zodOutputFormat(zodObject) {
-  let jsonSchema = toJSONSchema(zodObject, { reused: "ref" });
-  jsonSchema = transformJSONSchema(jsonSchema);
-  return {
-    type: "json_schema",
-    schema: {
-      ...jsonSchema
-    },
-    parse: (content) => {
-      let parsed;
-      try {
-        parsed = JSON.parse(content);
-      } catch (error51) {
-        throw new AnthropicError(`Failed to parse structured output as JSON: ${error51 instanceof Error ? error51.message : String(error51)}`);
-      }
-      const output = zodObject.safeParse(parsed);
-      if (!output.success) {
-        const formattedIssues = output.error.issues.slice(0, 5).map((issue2) => `  - ${issue2.path.join(".")}: ${issue2.message}`).join("\n");
-        const issueCount = output.error.issues.length;
-        const suffix = issueCount > 5 ? `
-  ... and ${issueCount - 5} more issue(s)` : "";
-        throw new AnthropicError(`Failed to parse structured output: ${output.error.message}
-Validation issues:
-${formattedIssues}${suffix}`);
-      }
-      return output.data;
-    }
-  };
-}
-
 // src/types.ts
 var SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
 var FindingSchema = external_exports.object({
@@ -31957,6 +31824,11 @@ var AuditorResultSchema = external_exports.object({
 });
 
 // src/auditor.ts
+var TOOL_NAME = "reportar_auditoria";
+function toolInputSchema() {
+  const { $schema: _descartado, ...schema } = external_exports.toJSONSchema(AuditorResultSchema);
+  return schema;
+}
 function renderCommand(label, result) {
   if (!result) return `### ${label}
 no se ejecut\xF3
@@ -31998,14 +31870,20 @@ ${f.patch}`).join("\n\n");
 async function runAuditor(deps) {
   const { client, name, prompt, sharedContext, policy } = deps;
   const cfg = policy.auditors[name];
-  const response = await client.messages.parse(
+  const response = await client.messages.create(
     {
       model: cfg?.model ?? policy.model,
       max_tokens: 16e3,
-      output_config: {
-        effort: cfg?.effort ?? "high",
-        format: zodOutputFormat(AuditorResultSchema)
-      },
+      tools: [
+        {
+          name: TOOL_NAME,
+          description: "Reporta el resultado de tu auditor\xEDa. Es la \xFAnica forma de responder: todo hallazgo va ac\xE1, no en texto libre.",
+          input_schema: toolInputSchema()
+        }
+      ],
+      // Forzada, no sugerida. Pedirle el esquema por prompt hace que a veces
+      // conteste en prosa, y entonces no hay resultado que leer.
+      tool_choice: { type: "tool", name: TOOL_NAME },
       system: [
         { type: "text", text: sharedContext, cache_control: { type: "ephemeral" } },
         { type: "text", text: prompt }
@@ -32024,7 +31902,14 @@ async function runAuditor(deps) {
       maxRetries: cfg?.maxRetries ?? policy.maxRetries
     }
   );
-  const parsed = AuditorResultSchema.safeParse(response.parsed_output);
+  const reporte = response.content.find((block) => block.type === "tool_use");
+  if (!reporte) {
+    const tipos = response.content.map((block) => block.type).join(", ") || "ninguno";
+    throw new Error(
+      `El auditor ${name} no us\xF3 la herramienta para reportar: la respuesta trajo ${tipos}.`
+    );
+  }
+  const parsed = AuditorResultSchema.safeParse(reporte.input);
   if (!parsed.success) {
     throw new Error(`El auditor ${name} devolvi\xF3 una respuesta inv\xE1lida: ${parsed.error.message}`);
   }
@@ -32134,7 +32019,6 @@ var TriggerSchema = external_exports.enum([
 ]);
 var AuditorPolicySchema = external_exports.object({
   when: external_exports.union([external_exports.literal("always"), external_exports.literal("criteria_available"), external_exports.array(TriggerSchema)]),
-  effort: external_exports.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
   model: external_exports.string().optional(),
   timeout_ms: external_exports.number().int().positive().optional(),
   max_retries: external_exports.number().int().min(0).optional()
@@ -32167,7 +32051,6 @@ function normalizeAuditors(raw) {
   for (const [name, cfg] of Object.entries(raw ?? {})) {
     auditors[name] = {
       when: cfg.when,
-      effort: cfg.effort,
       model: cfg.model,
       timeoutMs: cfg.timeout_ms,
       maxRetries: cfg.max_retries
@@ -32177,7 +32060,7 @@ function normalizeAuditors(raw) {
 }
 function normalize(raw, base) {
   return {
-    model: raw.model ?? base?.model ?? "claude-sonnet-5",
+    model: raw.model ?? base?.model ?? "deepseek-chat",
     required: raw.required ?? base?.required ?? ["build", "tests"],
     blockOn: raw.block_on ?? base?.blockOn ?? ["CRITICAL", "HIGH"],
     minConfidence: raw.min_confidence ?? base?.minConfidence ?? 0.7,
@@ -32557,6 +32440,7 @@ function required2(name) {
   if (!value) throw new Error(`Falta la variable de entorno ${name}`);
   return value;
 }
+var DEEPSEEK_BASE_URL = "https://api.deepseek.com/anthropic";
 function input(name) {
   return process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`];
 }
@@ -32581,8 +32465,12 @@ async function main() {
     prNumber: event.pull_request.number,
     commitSha: event.pull_request.head.sha,
     workspace,
+    // El SDK es el de Anthropic porque DeepSeek expone su API con ese mismo
+    // formato. Lo que no cubre son los structured outputs por esquema: por eso
+    // `runAuditor` pide el resultado con una herramienta forzada.
     anthropic: new Anthropic({
-      apiKey: requiredInput("anthropic-api-key")
+      apiKey: requiredInput("deepseek-api-key"),
+      baseURL: input("api-base-url") ?? DEEPSEEK_BASE_URL
     }),
     octokit: new Octokit2({
       auth: requiredInput("github-token")
@@ -32599,6 +32487,7 @@ if (isEntrypoint) {
   await main();
 }
 export {
+  DEEPSEEK_BASE_URL,
   input,
   main,
   requiredInput,
