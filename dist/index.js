@@ -32430,6 +32430,7 @@ async function runStack(stack, cwd) {
 async function runGate(deps) {
   let ctx = null;
   try {
+    const policy = await deps.loadPolicy(deps.workspace);
     const stack = await deps.detect(deps.workspace);
     const runner = await deps.run(stack, deps.workspace);
     ctx = await buildContext({
@@ -32447,7 +32448,7 @@ async function runGate(deps) {
     let names = [];
     let results = { results: [], errors: [] };
     if (!buildFailed) {
-      names = selectAuditors(deps.policy, ctx.changedFiles, {
+      names = selectAuditors(policy, ctx.changedFiles, {
         criteriaAvailable: ctx.criteria !== null,
         testsFailed
       });
@@ -32457,12 +32458,12 @@ async function runGate(deps) {
           names,
           prompts: deps.prompts,
           sharedContext: renderSharedContext(ctx),
-          policy: deps.policy
+          policy
         });
       }
     }
     const findings = results.results.flatMap((r) => r.findings);
-    const decision = decide(deps.policy, runner, findings);
+    const decision = decide(policy, runner, findings);
     await upsertComment(
       deps.octokit,
       ctx,
@@ -32535,7 +32536,7 @@ async function main() {
     octokit: new Octokit2({
       auth: requiredInput("github-token")
     }),
-    policy: await loadPolicy(workspace),
+    loadPolicy,
     prompts: await loadPrompts(),
     detect: detectStack,
     run: runStack
