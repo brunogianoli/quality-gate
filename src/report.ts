@@ -4,7 +4,13 @@ export const MARKER = '<!-- ai-quality-gate -->';
 
 export interface ReportOctokit {
   issues: {
-    listComments(args: { owner: string; repo: string; issue_number: number; per_page?: number }): Promise<{
+    listComments(args: {
+      owner: string;
+      repo: string;
+      issue_number: number;
+      per_page?: number;
+      page?: number;
+    }): Promise<{
       data: Array<{ id: number; body?: string | undefined }>;
     }>;
     createComment(args: { owner: string; repo: string; issue_number: number; body: string }): Promise<unknown>;
@@ -90,19 +96,37 @@ export function renderComment(deps: RenderCommentDeps): string {
   return parts.join('\n');
 }
 
+const PER_PAGE = 100;
+
+// Sin paginar, una PR con más de cien comentarios no encuentra el marcador y
+// termina creando un comentario nuevo en cada push — exactamente lo que el
+// marcador existe para evitar.
+async function findMarkerComment(
+  octokit: ReportOctokit,
+  ctx: AuditContext,
+): Promise<{ id: number } | null> {
+  for (let page = 1; ; page++) {
+    const { data } = await octokit.issues.listComments({
+      owner: ctx.owner,
+      repo: ctx.repo,
+      issue_number: ctx.prNumber,
+      per_page: PER_PAGE,
+      page,
+    });
+
+    const found = data.find((c) => c.body?.includes(MARKER));
+    if (found) return found;
+
+    if (data.length < PER_PAGE) return null;
+  }
+}
+
 export async function upsertComment(
   octokit: ReportOctokit,
   ctx: AuditContext,
   body: string,
 ): Promise<void> {
-  const { data } = await octokit.issues.listComments({
-    owner: ctx.owner,
-    repo: ctx.repo,
-    issue_number: ctx.prNumber,
-    per_page: 100,
-  });
-
-  const existing = data.find((c) => c.body?.includes(MARKER));
+  const existing = await findMarkerComment(octokit, ctx);
 
   if (existing) {
     await octokit.issues.updateComment({

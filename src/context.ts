@@ -5,7 +5,13 @@ export interface OctokitLike {
     get(args: { owner: string; repo: string; pull_number: number }): Promise<{
       data: { body?: string | null };
     }>;
-    listFiles(args: { owner: string; repo: string; pull_number: number; per_page?: number }): Promise<{
+    listFiles(args: {
+      owner: string;
+      repo: string;
+      pull_number: number;
+      per_page?: number;
+      page?: number;
+    }): Promise<{
       data: Array<{
         filename: string;
         status: string;
@@ -36,6 +42,43 @@ function normalizeStatus(status: string): FileStatus {
   return 'modified';
 }
 
+// El máximo que `pulls.listFiles` devuelve por página. Pedir más no falla: la
+// API acepta el parámetro y devuelve 100 igual, así que un valor mayor trunca
+// el diff en silencio en vez de dar error.
+const PER_PAGE = 100;
+
+async function listAllFiles(
+  octokit: OctokitLike,
+  owner: string,
+  repo: string,
+  prNumber: number,
+): Promise<ChangedFile[]> {
+  const files: ChangedFile[] = [];
+
+  for (let page = 1; ; page++) {
+    const { data } = await octokit.pulls.listFiles({
+      owner,
+      repo,
+      pull_number: prNumber,
+      per_page: PER_PAGE,
+      page,
+    });
+
+    for (const f of data) {
+      files.push({
+        path: f.filename,
+        status: normalizeStatus(f.status),
+        additions: f.additions,
+        deletions: f.deletions,
+        patch: f.patch ?? null,
+      });
+    }
+
+    // Una página incompleta es la última: no hay nada más que pedir.
+    if (data.length < PER_PAGE) return files;
+  }
+}
+
 export interface ContextDeps {
   octokit: OctokitLike;
   owner: string;
@@ -51,20 +94,7 @@ export async function buildContext(deps: ContextDeps): Promise<AuditContext> {
   const pr = await octokit.pulls.get({ owner, repo, pull_number: prNumber });
   const prBody = pr.data.body ?? null;
 
-  const filesResponse = await octokit.pulls.listFiles({
-    owner,
-    repo,
-    pull_number: prNumber,
-    per_page: 300,
-  });
-
-  const changedFiles: ChangedFile[] = filesResponse.data.map((f) => ({
-    path: f.filename,
-    status: normalizeStatus(f.status),
-    additions: f.additions,
-    deletions: f.deletions,
-    patch: f.patch ?? null,
-  }));
+  const changedFiles = await listAllFiles(octokit, owner, repo, prNumber);
 
   let criteria: string | null = null;
   let criteriaSource: AuditContext['criteriaSource'] = null;

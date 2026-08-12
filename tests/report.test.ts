@@ -146,6 +146,54 @@ describe('upsertComment', () => {
     expect(update).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 55, body: 'nuevo' }));
     expect(create).not.toHaveBeenCalled();
   });
+
+  it('encuentra el marcador aunque esté en la segunda página de comentarios', async () => {
+    // Sin paginar, una PR con más de 100 comentarios no encuentra el marcador
+    // y crea un comentario nuevo en cada corrida — justo lo que el marcador
+    // existe para evitar.
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ id: i + 1, body: `ruido ${i}` }));
+    const page2 = [{ id: 55, body: `${MARKER}\nviejo` }];
+    const create = vi.fn().mockResolvedValue({});
+    const update = vi.fn().mockResolvedValue({});
+    const octokit = {
+      issues: {
+        listComments: vi.fn(async (args: { page?: number }) => ({
+          data: [page1, page2][(args.page ?? 1) - 1] ?? [],
+        })),
+        createComment: create,
+        updateComment: update,
+      },
+      checks: { create: vi.fn() },
+    } as unknown as ReportOctokit;
+
+    await upsertComment(octokit, ctx, 'nuevo');
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({ comment_id: 55, body: 'nuevo' }));
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('deja de paginar en cuanto encuentra el marcador', async () => {
+    const withMarker = Array.from({ length: 100 }, (_, i) =>
+      i === 0 ? { id: 55, body: `${MARKER}\nviejo` } : { id: i + 1, body: `ruido ${i}` },
+    );
+    const listComments = vi.fn(async (args: { page?: number }) => ({
+      data: (args.page ?? 1) === 1 ? withMarker : [{ id: 999, body: 'otra página' }],
+    }));
+    const octokit = {
+      issues: {
+        listComments,
+        createComment: vi.fn().mockResolvedValue({}),
+        updateComment: vi.fn().mockResolvedValue({}),
+      },
+      checks: { create: vi.fn() },
+    } as unknown as ReportOctokit;
+
+    await upsertComment(octokit, ctx, 'nuevo');
+
+    // La página 1 vino llena, pero ya trajo el marcador: pedir la 2 sería
+    // gastar una llamada a la API sin necesidad.
+    expect(listComments).toHaveBeenCalledOnce();
+  });
 });
 
 describe('publishCheck', () => {

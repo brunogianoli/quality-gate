@@ -9,21 +9,6 @@ está en el historial de git de la rama `feat/quality-gate`.
 
 ## Atender pronto
 
-### Los límites de paginación de la API de GitHub no se manejan
-
-Dos lugares, mismo patrón:
-
-- **`src/context.ts`** pide `per_page: 300` a `pulls.listFiles`. El máximo real de
-  la API es 100, así que una PR con más de cien archivos cambiados **trunca
-  `changedFiles` en silencio** — los auditores reciben un diff incompleto y nadie
-  se entera.
-- **`src/report.ts`** lista comentarios con `per_page: 100` sin paginar. Una PR con
-  más de cien comentarios podría no encontrar el marcador del gate y **crear un
-  comentario nuevo en cada corrida**, que es justo el problema que ese marcador
-  existe para evitar.
-
-El arreglo es el mismo en ambos: paginar.
-
 ### El cebado del caché depende de la posición en el array
 
 `src/orchestrator.ts` corre el primer auditor en serie para que escriba el caché
@@ -81,7 +66,7 @@ Fallan hacia el lado seguro o su impacto es acotado.
 ## Lo que falta de verdad
 
 Nada de lo anterior es lo más importante. **El sistema nunca habló con la API de
-Anthropic ni con GitHub.** Los 106 tests corren con ambas mockeadas, que es lo
+Anthropic ni con GitHub.** Los 111 tests corren con ambas mockeadas, que es lo
 correcto para una suite unitaria, pero significa que sabemos que las piezas
 encajan entre sí, no que funcionan contra el mundo real.
 
@@ -90,3 +75,12 @@ repositorio fixture, ver el gate correr solo, comentar el `FAIL`, y que un push
 que arregle el test lo lleve a `PASS`. Eso requiere la Action publicada en GitHub
 y una API key, y es donde se va a ver si los auditores aciertan o generan ruido —
 que es la única pregunta que define si este sistema sirve.
+
+## Resueltos
+
+- **Los límites de paginación de la API de GitHub no se manejaban.**
+  `src/context.ts` pedía `per_page: 300` a `pulls.listFiles` (el máximo real es
+  100, así que truncaba el diff en silencio) y `src/report.ts` listaba
+  comentarios sin paginar (podía no encontrar el marcador y crear un comentario
+  nuevo por corrida). Ambos paginan ahora, cortando en la primera página
+  incompleta; `upsertComment` además corta apenas encuentra el marcador.

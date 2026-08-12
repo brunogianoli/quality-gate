@@ -74,6 +74,34 @@ function spyOctokit(prBody: string | null, issueBody?: string): {
   return { octokit, issueGetCalls };
 }
 
+type ListedFile = { filename: string; status: string; additions: number; deletions: number; patch?: string | undefined };
+
+function fileAt(i: number): ListedFile {
+  return { filename: `src/f${i}.ts`, status: 'modified', additions: 1, deletions: 0, patch: '@@ x @@' };
+}
+
+interface ListFilesCall {
+  per_page?: number | undefined;
+  page?: number | undefined;
+}
+
+function pagedOctokit(pages: ListedFile[][]): { octokit: OctokitLike; calls: ListFilesCall[] } {
+  const calls: ListFilesCall[] = [];
+  const octokit: OctokitLike = {
+    pulls: {
+      get: async () => ({ data: { body: null } }),
+      listFiles: async (args) => {
+        calls.push({ per_page: args.per_page, page: args.page });
+        return { data: pages[(args.page ?? 1) - 1] ?? [] };
+      },
+    },
+    issues: {
+      get: async () => ({ data: { body: '' } }),
+    },
+  };
+  return { octokit, calls };
+}
+
 describe('buildContext', () => {
   const base = { owner: 'o', repo: 'r', prNumber: 1, commitSha: 'abc123', runner };
 
@@ -126,5 +154,30 @@ describe('buildContext', () => {
     // si buildContext pasara prNumber en vez del número extraído, este
     // assert lo detectaría.
     expect(issueGetCalls[0]?.issue_number).not.toBe(base.prNumber);
+  });
+
+  it('pide páginas de 100, que es el máximo real de la API', async () => {
+    // Pedir per_page: 300 no es un error: la API lo acepta y devuelve 100.
+    // Por eso el truncado es silencioso y sólo se ve auditando los args.
+    const { octokit, calls } = pagedOctokit([[fileAt(1)]]);
+    await buildContext({ ...base, octokit });
+    expect(calls[0]?.per_page).toBe(100);
+  });
+
+  it('trae todos los archivos de una PR con más de 100 cambios', async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => fileAt(i));
+    const page2 = Array.from({ length: 50 }, (_, i) => fileAt(100 + i));
+    const { octokit } = pagedOctokit([page1, page2]);
+
+    const ctx = await buildContext({ ...base, octokit });
+
+    expect(ctx.changedFiles).toHaveLength(150);
+    expect(ctx.changedFiles[149]?.path).toBe('src/f149.ts');
+  });
+
+  it('no pide una página extra cuando la primera vuelve incompleta', async () => {
+    const { octokit, calls } = pagedOctokit([[fileAt(1), fileAt(2)]]);
+    await buildContext({ ...base, octokit });
+    expect(calls).toHaveLength(1);
   });
 });
