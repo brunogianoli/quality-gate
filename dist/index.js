@@ -10052,11 +10052,11 @@ function parseBetaOutputFormat(params, content) {
 }
 
 // node_modules/@anthropic-ai/sdk/_vendor/partial-json-parser/parser.mjs
-var tokenize = (input) => {
+var tokenize = (input2) => {
   let current = 0;
   let tokens = [];
-  while (current < input.length) {
-    let char = input[current];
+  while (current < input2.length) {
+    let char = input2[current];
     if (char === "\\") {
       current++;
       continue;
@@ -10112,26 +10112,26 @@ var tokenize = (input) => {
     if (char === '"') {
       let value = "";
       let danglingQuote = false;
-      char = input[++current];
+      char = input2[++current];
       while (char !== '"') {
-        if (current === input.length) {
+        if (current === input2.length) {
           danglingQuote = true;
           break;
         }
         if (char === "\\") {
           current++;
-          if (current === input.length) {
+          if (current === input2.length) {
             danglingQuote = true;
             break;
           }
-          value += char + input[current];
-          char = input[++current];
+          value += char + input2[current];
+          char = input2[++current];
         } else {
           value += char;
-          char = input[++current];
+          char = input2[++current];
         }
       }
-      char = input[++current];
+      char = input2[++current];
       if (!danglingQuote) {
         tokens.push({
           type: "string",
@@ -10150,11 +10150,11 @@ var tokenize = (input) => {
       let value = "";
       if (char === "-") {
         value += char;
-        char = input[++current];
+        char = input2[++current];
       }
       while (char && NUMBERS.test(char) || char === ".") {
         value += char;
-        char = input[++current];
+        char = input2[++current];
       }
       tokens.push({
         type: "number",
@@ -10166,11 +10166,11 @@ var tokenize = (input) => {
     if (char && LETTERS.test(char)) {
       let value = "";
       while (char && LETTERS.test(char)) {
-        if (current === input.length) {
+        if (current === input2.length) {
           break;
         }
         value += char;
-        char = input[++current];
+        char = input2[++current];
       }
       if (value == "true" || value == "false" || value === "null") {
         tokens.push({
@@ -10269,7 +10269,7 @@ var generate = (tokens) => {
   });
   return output;
 };
-var partialParse = (input) => JSON.parse(generate(unstrip(strip(tokenize(input)))));
+var partialParse = (input2) => JSON.parse(generate(unstrip(strip(tokenize(input2)))));
 
 // node_modules/@anthropic-ai/sdk/lib/BetaMessageStream.mjs
 var _BetaMessageStream_instances;
@@ -11250,11 +11250,11 @@ async function generateToolResponse(params, lastMessage = params.messages.at(-1)
       };
     }
     try {
-      let input = toolUse.input;
+      let input2 = toolUse.input;
       if ("parse" in tool && tool.parse) {
-        input = tool.parse(input);
+        input2 = tool.parse(input2);
       }
-      const result = await tool.run(input, {
+      const result = await tool.run(input2, {
         toolUseBlock: toolUse,
         signal: requestOptions?.signal
       });
@@ -18097,8 +18097,8 @@ function cached(getter) {
     }
   };
 }
-function nullish(input) {
-  return input === null || input === void 0;
+function nullish(input2) {
+  return input2 === null || input2 === void 0;
 }
 function cleanRegex(source) {
   const start = source.startsWith("^") ? 1 : 0;
@@ -18185,8 +18185,8 @@ function randomString(length = 10) {
 function esc(str) {
   return JSON.stringify(str);
 }
-function slugify(input) {
-  return input.toLowerCase().trim().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
+function slugify(input2) {
+  return input2.toLowerCase().trim().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
 }
 var captureStackTrace = "captureStackTrace" in Error ? Error.captureStackTrace : (..._args) => {
 };
@@ -18591,19 +18591,19 @@ function finalizeIssue(iss, ctx, config2) {
   }
   return rest;
 }
-function getSizableOrigin(input) {
-  if (input instanceof Set)
+function getSizableOrigin(input2) {
+  if (input2 instanceof Set)
     return "set";
-  if (input instanceof Map)
+  if (input2 instanceof Map)
     return "map";
-  if (input instanceof File)
+  if (input2 instanceof File)
     return "file";
   return "unknown";
 }
-function getLengthableOrigin(input) {
-  if (Array.isArray(input))
+function getLengthableOrigin(input2) {
+  if (Array.isArray(input2))
     return "array";
-  if (typeof input === "string")
+  if (typeof input2 === "string")
     return "string";
   return "unknown";
 }
@@ -18629,12 +18629,12 @@ function parsedType(data) {
   return t;
 }
 function issue(...args) {
-  const [iss, input, inst] = args;
+  const [iss, input2, inst] = args;
   if (typeof iss === "string") {
     return {
       message: iss,
       code: "custom",
-      input,
+      input: input2,
       inst
     };
   }
@@ -19178,23 +19178,23 @@ var $ZodCheckNumberFormat = /* @__PURE__ */ $constructor("$ZodCheckNumberFormat"
       bag.pattern = integer;
   });
   inst._zod.check = (payload) => {
-    const input = payload.value;
+    const input2 = payload.value;
     if (isInt) {
-      if (!Number.isInteger(input)) {
+      if (!Number.isInteger(input2)) {
         payload.issues.push({
           expected: origin,
           format: def.format,
           code: "invalid_type",
           continue: false,
-          input,
+          input: input2,
           inst
         });
         return;
       }
-      if (!Number.isSafeInteger(input)) {
-        if (input > 0) {
+      if (!Number.isSafeInteger(input2)) {
+        if (input2 > 0) {
           payload.issues.push({
-            input,
+            input: input2,
             code: "too_big",
             maximum: Number.MAX_SAFE_INTEGER,
             note: "Integers must be within the safe integer range.",
@@ -19205,7 +19205,7 @@ var $ZodCheckNumberFormat = /* @__PURE__ */ $constructor("$ZodCheckNumberFormat"
           });
         } else {
           payload.issues.push({
-            input,
+            input: input2,
             code: "too_small",
             minimum: Number.MIN_SAFE_INTEGER,
             note: "Integers must be within the safe integer range.",
@@ -19218,10 +19218,10 @@ var $ZodCheckNumberFormat = /* @__PURE__ */ $constructor("$ZodCheckNumberFormat"
         return;
       }
     }
-    if (input < minimum) {
+    if (input2 < minimum) {
       payload.issues.push({
         origin: "number",
-        input,
+        input: input2,
         code: "too_small",
         minimum,
         inclusive: true,
@@ -19229,10 +19229,10 @@ var $ZodCheckNumberFormat = /* @__PURE__ */ $constructor("$ZodCheckNumberFormat"
         continue: !def.abort
       });
     }
-    if (input > maximum) {
+    if (input2 > maximum) {
       payload.issues.push({
         origin: "number",
-        input,
+        input: input2,
         code: "too_big",
         maximum,
         inclusive: true,
@@ -19252,11 +19252,11 @@ var $ZodCheckBigIntFormat = /* @__PURE__ */ $constructor("$ZodCheckBigIntFormat"
     bag.maximum = maximum;
   });
   inst._zod.check = (payload) => {
-    const input = payload.value;
-    if (input < minimum) {
+    const input2 = payload.value;
+    if (input2 < minimum) {
       payload.issues.push({
         origin: "bigint",
-        input,
+        input: input2,
         code: "too_small",
         minimum,
         inclusive: true,
@@ -19264,10 +19264,10 @@ var $ZodCheckBigIntFormat = /* @__PURE__ */ $constructor("$ZodCheckBigIntFormat"
         continue: !def.abort
       });
     }
-    if (input > maximum) {
+    if (input2 > maximum) {
       payload.issues.push({
         origin: "bigint",
-        input,
+        input: input2,
         code: "too_big",
         maximum,
         inclusive: true,
@@ -19290,16 +19290,16 @@ var $ZodCheckMaxSize = /* @__PURE__ */ $constructor("$ZodCheckMaxSize", (inst, d
       inst2._zod.bag.maximum = def.maximum;
   });
   inst._zod.check = (payload) => {
-    const input = payload.value;
-    const size = input.size;
+    const input2 = payload.value;
+    const size = input2.size;
     if (size <= def.maximum)
       return;
     payload.issues.push({
-      origin: getSizableOrigin(input),
+      origin: getSizableOrigin(input2),
       code: "too_big",
       maximum: def.maximum,
       inclusive: true,
-      input,
+      input: input2,
       inst,
       continue: !def.abort
     });
@@ -19318,16 +19318,16 @@ var $ZodCheckMinSize = /* @__PURE__ */ $constructor("$ZodCheckMinSize", (inst, d
       inst2._zod.bag.minimum = def.minimum;
   });
   inst._zod.check = (payload) => {
-    const input = payload.value;
-    const size = input.size;
+    const input2 = payload.value;
+    const size = input2.size;
     if (size >= def.minimum)
       return;
     payload.issues.push({
-      origin: getSizableOrigin(input),
+      origin: getSizableOrigin(input2),
       code: "too_small",
       minimum: def.minimum,
       inclusive: true,
-      input,
+      input: input2,
       inst,
       continue: !def.abort
     });
@@ -19347,13 +19347,13 @@ var $ZodCheckSizeEquals = /* @__PURE__ */ $constructor("$ZodCheckSizeEquals", (i
     bag.size = def.size;
   });
   inst._zod.check = (payload) => {
-    const input = payload.value;
-    const size = input.size;
+    const input2 = payload.value;
+    const size = input2.size;
     if (size === def.size)
       return;
     const tooBig = size > def.size;
     payload.issues.push({
-      origin: getSizableOrigin(input),
+      origin: getSizableOrigin(input2),
       ...tooBig ? { code: "too_big", maximum: def.size } : { code: "too_small", minimum: def.size },
       inclusive: true,
       exact: true,
@@ -19376,17 +19376,17 @@ var $ZodCheckMaxLength = /* @__PURE__ */ $constructor("$ZodCheckMaxLength", (ins
       inst2._zod.bag.maximum = def.maximum;
   });
   inst._zod.check = (payload) => {
-    const input = payload.value;
-    const length = input.length;
+    const input2 = payload.value;
+    const length = input2.length;
     if (length <= def.maximum)
       return;
-    const origin = getLengthableOrigin(input);
+    const origin = getLengthableOrigin(input2);
     payload.issues.push({
       origin,
       code: "too_big",
       maximum: def.maximum,
       inclusive: true,
-      input,
+      input: input2,
       inst,
       continue: !def.abort
     });
@@ -19405,17 +19405,17 @@ var $ZodCheckMinLength = /* @__PURE__ */ $constructor("$ZodCheckMinLength", (ins
       inst2._zod.bag.minimum = def.minimum;
   });
   inst._zod.check = (payload) => {
-    const input = payload.value;
-    const length = input.length;
+    const input2 = payload.value;
+    const length = input2.length;
     if (length >= def.minimum)
       return;
-    const origin = getLengthableOrigin(input);
+    const origin = getLengthableOrigin(input2);
     payload.issues.push({
       origin,
       code: "too_small",
       minimum: def.minimum,
       inclusive: true,
-      input,
+      input: input2,
       inst,
       continue: !def.abort
     });
@@ -19435,11 +19435,11 @@ var $ZodCheckLengthEquals = /* @__PURE__ */ $constructor("$ZodCheckLengthEquals"
     bag.length = def.length;
   });
   inst._zod.check = (payload) => {
-    const input = payload.value;
-    const length = input.length;
+    const input2 = payload.value;
+    const length = input2.length;
     if (length === def.length)
       return;
-    const origin = getLengthableOrigin(input);
+    const origin = getLengthableOrigin(input2);
     const tooBig = length > def.length;
     payload.issues.push({
       origin,
@@ -20110,15 +20110,15 @@ var $ZodNumber = /* @__PURE__ */ $constructor("$ZodNumber", (inst, def) => {
         payload.value = Number(payload.value);
       } catch (_) {
       }
-    const input = payload.value;
-    if (typeof input === "number" && !Number.isNaN(input) && Number.isFinite(input)) {
+    const input2 = payload.value;
+    if (typeof input2 === "number" && !Number.isNaN(input2) && Number.isFinite(input2)) {
       return payload;
     }
-    const received = typeof input === "number" ? Number.isNaN(input) ? "NaN" : !Number.isFinite(input) ? "Infinity" : void 0 : void 0;
+    const received = typeof input2 === "number" ? Number.isNaN(input2) ? "NaN" : !Number.isFinite(input2) ? "Infinity" : void 0 : void 0;
     payload.issues.push({
       expected: "number",
       code: "invalid_type",
-      input,
+      input: input2,
       inst,
       ...received ? { received } : {}
     });
@@ -20138,13 +20138,13 @@ var $ZodBoolean = /* @__PURE__ */ $constructor("$ZodBoolean", (inst, def) => {
         payload.value = Boolean(payload.value);
       } catch (_) {
       }
-    const input = payload.value;
-    if (typeof input === "boolean")
+    const input2 = payload.value;
+    if (typeof input2 === "boolean")
       return payload;
     payload.issues.push({
       expected: "boolean",
       code: "invalid_type",
-      input,
+      input: input2,
       inst
     });
     return payload;
@@ -20177,13 +20177,13 @@ var $ZodBigIntFormat = /* @__PURE__ */ $constructor("$ZodBigIntFormat", (inst, d
 var $ZodSymbol = /* @__PURE__ */ $constructor("$ZodSymbol", (inst, def) => {
   $ZodType.init(inst, def);
   inst._zod.parse = (payload, _ctx) => {
-    const input = payload.value;
-    if (typeof input === "symbol")
+    const input2 = payload.value;
+    if (typeof input2 === "symbol")
       return payload;
     payload.issues.push({
       expected: "symbol",
       code: "invalid_type",
-      input,
+      input: input2,
       inst
     });
     return payload;
@@ -20194,13 +20194,13 @@ var $ZodUndefined = /* @__PURE__ */ $constructor("$ZodUndefined", (inst, def) =>
   inst._zod.pattern = _undefined;
   inst._zod.values = /* @__PURE__ */ new Set([void 0]);
   inst._zod.parse = (payload, _ctx) => {
-    const input = payload.value;
-    if (typeof input === "undefined")
+    const input2 = payload.value;
+    if (typeof input2 === "undefined")
       return payload;
     payload.issues.push({
       expected: "undefined",
       code: "invalid_type",
-      input,
+      input: input2,
       inst
     });
     return payload;
@@ -20211,13 +20211,13 @@ var $ZodNull = /* @__PURE__ */ $constructor("$ZodNull", (inst, def) => {
   inst._zod.pattern = _null;
   inst._zod.values = /* @__PURE__ */ new Set([null]);
   inst._zod.parse = (payload, _ctx) => {
-    const input = payload.value;
-    if (input === null)
+    const input2 = payload.value;
+    if (input2 === null)
       return payload;
     payload.issues.push({
       expected: "null",
       code: "invalid_type",
-      input,
+      input: input2,
       inst
     });
     return payload;
@@ -20246,13 +20246,13 @@ var $ZodNever = /* @__PURE__ */ $constructor("$ZodNever", (inst, def) => {
 var $ZodVoid = /* @__PURE__ */ $constructor("$ZodVoid", (inst, def) => {
   $ZodType.init(inst, def);
   inst._zod.parse = (payload, _ctx) => {
-    const input = payload.value;
-    if (typeof input === "undefined")
+    const input2 = payload.value;
+    if (typeof input2 === "undefined")
       return payload;
     payload.issues.push({
       expected: "void",
       code: "invalid_type",
-      input,
+      input: input2,
       inst
     });
     return payload;
@@ -20267,15 +20267,15 @@ var $ZodDate = /* @__PURE__ */ $constructor("$ZodDate", (inst, def) => {
       } catch (_err) {
       }
     }
-    const input = payload.value;
-    const isDate = input instanceof Date;
-    const isValidDate = isDate && !Number.isNaN(input.getTime());
+    const input2 = payload.value;
+    const isDate = input2 instanceof Date;
+    const isValidDate = isDate && !Number.isNaN(input2.getTime());
     if (isValidDate)
       return payload;
     payload.issues.push({
       expected: "date",
       code: "invalid_type",
-      input,
+      input: input2,
       ...isDate ? { received: "Invalid Date" } : {},
       inst
     });
@@ -20291,20 +20291,20 @@ function handleArrayResult(result, final, index) {
 var $ZodArray = /* @__PURE__ */ $constructor("$ZodArray", (inst, def) => {
   $ZodType.init(inst, def);
   inst._zod.parse = (payload, ctx) => {
-    const input = payload.value;
-    if (!Array.isArray(input)) {
+    const input2 = payload.value;
+    if (!Array.isArray(input2)) {
       payload.issues.push({
         expected: "array",
         code: "invalid_type",
-        input,
+        input: input2,
         inst
       });
       return payload;
     }
-    payload.value = Array(input.length);
+    payload.value = Array(input2.length);
     const proms = [];
-    for (let i = 0; i < input.length; i++) {
-      const item = input[i];
+    for (let i = 0; i < input2.length; i++) {
+      const item = input2[i];
       const result = def.element._zod.run({
         value: item,
         issues: []
@@ -20321,8 +20321,8 @@ var $ZodArray = /* @__PURE__ */ $constructor("$ZodArray", (inst, def) => {
     return payload;
   };
 });
-function handlePropertyResult(result, final, key, input, isOptionalIn, isOptionalOut) {
-  const isPresent = key in input;
+function handlePropertyResult(result, final, key, input2, isOptionalIn, isOptionalOut) {
+  const isPresent = key in input2;
   if (result.issues.length) {
     if (isOptionalIn && isOptionalOut && !isPresent) {
       return;
@@ -20364,14 +20364,14 @@ function normalizeDef(def) {
     optionalKeys: new Set(okeys)
   };
 }
-function handleCatchall(proms, input, payload, ctx, def, inst) {
+function handleCatchall(proms, input2, payload, ctx, def, inst) {
   const unrecognized = [];
   const keySet = def.keySet;
   const _catchall = def.catchall._zod;
   const t = _catchall.def.type;
   const isOptionalIn = _catchall.optin === "optional";
   const isOptionalOut = _catchall.optout === "optional";
-  for (const key in input) {
+  for (const key in input2) {
     if (key === "__proto__")
       continue;
     if (keySet.has(key))
@@ -20380,18 +20380,18 @@ function handleCatchall(proms, input, payload, ctx, def, inst) {
       unrecognized.push(key);
       continue;
     }
-    const r = _catchall.run({ value: input[key], issues: [] }, ctx);
+    const r = _catchall.run({ value: input2[key], issues: [] }, ctx);
     if (r instanceof Promise) {
-      proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input, isOptionalIn, isOptionalOut)));
+      proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input2, isOptionalIn, isOptionalOut)));
     } else {
-      handlePropertyResult(r, payload, key, input, isOptionalIn, isOptionalOut);
+      handlePropertyResult(r, payload, key, input2, isOptionalIn, isOptionalOut);
     }
   }
   if (unrecognized.length) {
     payload.issues.push({
       code: "unrecognized_keys",
       keys: unrecognized,
-      input,
+      input: input2,
       inst
     });
   }
@@ -20435,12 +20435,12 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
   let value;
   inst._zod.parse = (payload, ctx) => {
     value ?? (value = _normalized.value);
-    const input = payload.value;
-    if (!isObject2(input)) {
+    const input2 = payload.value;
+    if (!isObject2(input2)) {
       payload.issues.push({
         expected: "object",
         code: "invalid_type",
-        input,
+        input: input2,
         inst
       });
       return payload;
@@ -20452,17 +20452,17 @@ var $ZodObject = /* @__PURE__ */ $constructor("$ZodObject", (inst, def) => {
       const el = shape[key];
       const isOptionalIn = el._zod.optin === "optional";
       const isOptionalOut = el._zod.optout === "optional";
-      const r = el._zod.run({ value: input[key], issues: [] }, ctx);
+      const r = el._zod.run({ value: input2[key], issues: [] }, ctx);
       if (r instanceof Promise) {
-        proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input, isOptionalIn, isOptionalOut)));
+        proms.push(r.then((r2) => handlePropertyResult(r2, payload, key, input2, isOptionalIn, isOptionalOut)));
       } else {
-        handlePropertyResult(r, payload, key, input, isOptionalIn, isOptionalOut);
+        handlePropertyResult(r, payload, key, input2, isOptionalIn, isOptionalOut);
       }
     }
     if (!catchall) {
       return proms.length ? Promise.all(proms).then(() => payload) : payload;
     }
-    return handleCatchall(proms, input, payload, ctx, _normalized.value, inst);
+    return handleCatchall(proms, input2, payload, ctx, _normalized.value, inst);
   };
 });
 var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) => {
@@ -20571,12 +20571,12 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
   let value;
   inst._zod.parse = (payload, ctx) => {
     value ?? (value = _normalized.value);
-    const input = payload.value;
-    if (!isObject2(input)) {
+    const input2 = payload.value;
+    if (!isObject2(input2)) {
       payload.issues.push({
         expected: "object",
         code: "invalid_type",
-        input,
+        input: input2,
         inst
       });
       return payload;
@@ -20587,7 +20587,7 @@ var $ZodObjectJIT = /* @__PURE__ */ $constructor("$ZodObjectJIT", (inst, def) =>
       payload = fastpass(payload, ctx);
       if (!catchall)
         return payload;
-      return handleCatchall([], input, payload, ctx, value, inst);
+      return handleCatchall([], input2, payload, ctx, value, inst);
     }
     return superParse(payload, ctx);
   };
@@ -20747,17 +20747,17 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
     return map2;
   });
   inst._zod.parse = (payload, ctx) => {
-    const input = payload.value;
-    if (!isObject(input)) {
+    const input2 = payload.value;
+    if (!isObject(input2)) {
       payload.issues.push({
         code: "invalid_type",
         expected: "object",
-        input,
+        input: input2,
         inst
       });
       return payload;
     }
-    const opt = disc.value.get(input?.[def.discriminator]);
+    const opt = disc.value.get(input2?.[def.discriminator]);
     if (opt) {
       return opt._zod.run(payload, ctx);
     }
@@ -20770,7 +20770,7 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
       note: "No matching discriminator",
       discriminator: def.discriminator,
       options: Array.from(disc.value.keys()),
-      input,
+      input: input2,
       path: [def.discriminator],
       inst
     });
@@ -20780,9 +20780,9 @@ var $ZodDiscriminatedUnion = /* @__PURE__ */ $constructor("$ZodDiscriminatedUnio
 var $ZodIntersection = /* @__PURE__ */ $constructor("$ZodIntersection", (inst, def) => {
   $ZodType.init(inst, def);
   inst._zod.parse = (payload, ctx) => {
-    const input = payload.value;
-    const left = def.left._zod.run({ value: input, issues: [] }, ctx);
-    const right = def.right._zod.run({ value: input, issues: [] }, ctx);
+    const input2 = payload.value;
+    const left = def.left._zod.run({ value: input2, issues: [] }, ctx);
+    const right = def.right._zod.run({ value: input2, issues: [] }, ctx);
     const async = left instanceof Promise || right instanceof Promise;
     if (async) {
       return Promise.all([left, right]).then(([left2, right2]) => {
@@ -20879,10 +20879,10 @@ var $ZodTuple = /* @__PURE__ */ $constructor("$ZodTuple", (inst, def) => {
   $ZodType.init(inst, def);
   const items = def.items;
   inst._zod.parse = (payload, ctx) => {
-    const input = payload.value;
-    if (!Array.isArray(input)) {
+    const input2 = payload.value;
+    if (!Array.isArray(input2)) {
       payload.issues.push({
-        input,
+        input: input2,
         inst,
         expected: "tuple",
         code: "invalid_type"
@@ -20894,23 +20894,23 @@ var $ZodTuple = /* @__PURE__ */ $constructor("$ZodTuple", (inst, def) => {
     const optinStart = getTupleOptStart(items, "optin");
     const optoutStart = getTupleOptStart(items, "optout");
     if (!def.rest) {
-      if (input.length < optinStart) {
+      if (input2.length < optinStart) {
         payload.issues.push({
           code: "too_small",
           minimum: optinStart,
           inclusive: true,
-          input,
+          input: input2,
           inst,
           origin: "array"
         });
         return payload;
       }
-      if (input.length > items.length) {
+      if (input2.length > items.length) {
         payload.issues.push({
           code: "too_big",
           maximum: items.length,
           inclusive: true,
-          input,
+          input: input2,
           inst,
           origin: "array"
         });
@@ -20918,7 +20918,7 @@ var $ZodTuple = /* @__PURE__ */ $constructor("$ZodTuple", (inst, def) => {
     }
     const itemResults = new Array(items.length);
     for (let i = 0; i < items.length; i++) {
-      const r = items[i]._zod.run({ value: input[i], issues: [] }, ctx);
+      const r = items[i]._zod.run({ value: input2[i], issues: [] }, ctx);
       if (r instanceof Promise) {
         proms.push(r.then((rr) => {
           itemResults[i] = rr;
@@ -20929,7 +20929,7 @@ var $ZodTuple = /* @__PURE__ */ $constructor("$ZodTuple", (inst, def) => {
     }
     if (def.rest) {
       let i = items.length - 1;
-      const rest = input.slice(items.length);
+      const rest = input2.slice(items.length);
       for (const el of rest) {
         i++;
         const result = def.rest._zod.run({ value: el, issues: [] }, ctx);
@@ -20941,9 +20941,9 @@ var $ZodTuple = /* @__PURE__ */ $constructor("$ZodTuple", (inst, def) => {
       }
     }
     if (proms.length) {
-      return Promise.all(proms).then(() => handleTupleResults(itemResults, payload, items, input, optoutStart));
+      return Promise.all(proms).then(() => handleTupleResults(itemResults, payload, items, input2, optoutStart));
     }
-    return handleTupleResults(itemResults, payload, items, input, optoutStart);
+    return handleTupleResults(itemResults, payload, items, input2, optoutStart);
   };
 });
 function getTupleOptStart(items, key) {
@@ -20959,10 +20959,10 @@ function handleTupleResult(result, final, index) {
   }
   final.value[index] = result.value;
 }
-function handleTupleResults(itemResults, final, items, input, optoutStart) {
+function handleTupleResults(itemResults, final, items, input2, optoutStart) {
   for (let i = 0; i < items.length; i++) {
     const r = itemResults[i];
-    const isPresent = i < input.length;
+    const isPresent = i < input2.length;
     if (r.issues.length) {
       if (!isPresent && i >= optoutStart) {
         final.value.length = i;
@@ -20972,7 +20972,7 @@ function handleTupleResults(itemResults, final, items, input, optoutStart) {
     }
     final.value[i] = r.value;
   }
-  for (let i = final.value.length - 1; i >= input.length; i--) {
+  for (let i = final.value.length - 1; i >= input2.length; i--) {
     if (items[i]._zod.optout === "optional" && final.value[i] === void 0) {
       final.value.length = i;
     } else {
@@ -20984,12 +20984,12 @@ function handleTupleResults(itemResults, final, items, input, optoutStart) {
 var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
   $ZodType.init(inst, def);
   inst._zod.parse = (payload, ctx) => {
-    const input = payload.value;
-    if (!isPlainObject3(input)) {
+    const input2 = payload.value;
+    if (!isPlainObject3(input2)) {
       payload.issues.push({
         expected: "record",
         code: "invalid_type",
-        input,
+        input: input2,
         inst
       });
       return payload;
@@ -21018,7 +21018,7 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
             continue;
           }
           const outKey = keyResult.value;
-          const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
+          const result = def.valueType._zod.run({ value: input2[key], issues: [] }, ctx);
           if (result instanceof Promise) {
             proms.push(result.then((result2) => {
               if (result2.issues.length) {
@@ -21035,7 +21035,7 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
         }
       }
       let unrecognized;
-      for (const key in input) {
+      for (const key in input2) {
         if (!recordKeys.has(key)) {
           unrecognized = unrecognized ?? [];
           unrecognized.push(key);
@@ -21044,17 +21044,17 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
       if (unrecognized && unrecognized.length > 0) {
         payload.issues.push({
           code: "unrecognized_keys",
-          input,
+          input: input2,
           inst,
           keys: unrecognized
         });
       }
     } else {
       payload.value = {};
-      for (const key of Reflect.ownKeys(input)) {
+      for (const key of Reflect.ownKeys(input2)) {
         if (key === "__proto__")
           continue;
-        if (!Object.prototype.propertyIsEnumerable.call(input, key))
+        if (!Object.prototype.propertyIsEnumerable.call(input2, key))
           continue;
         let keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
         if (keyResult instanceof Promise) {
@@ -21072,7 +21072,7 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
         }
         if (keyResult.issues.length) {
           if (def.mode === "loose") {
-            payload.value[key] = input[key];
+            payload.value[key] = input2[key];
           } else {
             payload.issues.push({
               code: "invalid_key",
@@ -21085,7 +21085,7 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
           }
           continue;
         }
-        const result = def.valueType._zod.run({ value: input[key], issues: [] }, ctx);
+        const result = def.valueType._zod.run({ value: input2[key], issues: [] }, ctx);
         if (result instanceof Promise) {
           proms.push(result.then((result2) => {
             if (result2.issues.length) {
@@ -21110,27 +21110,27 @@ var $ZodRecord = /* @__PURE__ */ $constructor("$ZodRecord", (inst, def) => {
 var $ZodMap = /* @__PURE__ */ $constructor("$ZodMap", (inst, def) => {
   $ZodType.init(inst, def);
   inst._zod.parse = (payload, ctx) => {
-    const input = payload.value;
-    if (!(input instanceof Map)) {
+    const input2 = payload.value;
+    if (!(input2 instanceof Map)) {
       payload.issues.push({
         expected: "map",
         code: "invalid_type",
-        input,
+        input: input2,
         inst
       });
       return payload;
     }
     const proms = [];
     payload.value = /* @__PURE__ */ new Map();
-    for (const [key, value] of input) {
+    for (const [key, value] of input2) {
       const keyResult = def.keyType._zod.run({ value: key, issues: [] }, ctx);
       const valueResult = def.valueType._zod.run({ value, issues: [] }, ctx);
       if (keyResult instanceof Promise || valueResult instanceof Promise) {
         proms.push(Promise.all([keyResult, valueResult]).then(([keyResult2, valueResult2]) => {
-          handleMapResult(keyResult2, valueResult2, payload, key, input, inst, ctx);
+          handleMapResult(keyResult2, valueResult2, payload, key, input2, inst, ctx);
         }));
       } else {
-        handleMapResult(keyResult, valueResult, payload, key, input, inst, ctx);
+        handleMapResult(keyResult, valueResult, payload, key, input2, inst, ctx);
       }
     }
     if (proms.length)
@@ -21138,7 +21138,7 @@ var $ZodMap = /* @__PURE__ */ $constructor("$ZodMap", (inst, def) => {
     return payload;
   };
 });
-function handleMapResult(keyResult, valueResult, final, key, input, inst, ctx) {
+function handleMapResult(keyResult, valueResult, final, key, input2, inst, ctx) {
   if (keyResult.issues.length) {
     if (propertyKeyTypes.has(typeof key)) {
       final.issues.push(...prefixIssues(key, keyResult.issues));
@@ -21146,7 +21146,7 @@ function handleMapResult(keyResult, valueResult, final, key, input, inst, ctx) {
       final.issues.push({
         code: "invalid_key",
         origin: "map",
-        input,
+        input: input2,
         inst,
         issues: keyResult.issues.map((iss) => finalizeIssue(iss, ctx, config()))
       });
@@ -21159,7 +21159,7 @@ function handleMapResult(keyResult, valueResult, final, key, input, inst, ctx) {
       final.issues.push({
         origin: "map",
         code: "invalid_element",
-        input,
+        input: input2,
         inst,
         key,
         issues: valueResult.issues.map((iss) => finalizeIssue(iss, ctx, config()))
@@ -21171,10 +21171,10 @@ function handleMapResult(keyResult, valueResult, final, key, input, inst, ctx) {
 var $ZodSet = /* @__PURE__ */ $constructor("$ZodSet", (inst, def) => {
   $ZodType.init(inst, def);
   inst._zod.parse = (payload, ctx) => {
-    const input = payload.value;
-    if (!(input instanceof Set)) {
+    const input2 = payload.value;
+    if (!(input2 instanceof Set)) {
       payload.issues.push({
-        input,
+        input: input2,
         inst,
         expected: "set",
         code: "invalid_type"
@@ -21183,7 +21183,7 @@ var $ZodSet = /* @__PURE__ */ $constructor("$ZodSet", (inst, def) => {
     }
     const proms = [];
     payload.value = /* @__PURE__ */ new Set();
-    for (const item of input) {
+    for (const item of input2) {
       const result = def.valueType._zod.run({ value: item, issues: [] }, ctx);
       if (result instanceof Promise) {
         proms.push(result.then((result2) => handleSetResult(result2, payload)));
@@ -21208,14 +21208,14 @@ var $ZodEnum = /* @__PURE__ */ $constructor("$ZodEnum", (inst, def) => {
   inst._zod.values = valuesSet;
   inst._zod.pattern = new RegExp(`^(${values.filter((k) => propertyKeyTypes.has(typeof k)).map((o) => typeof o === "string" ? escapeRegex(o) : o.toString()).join("|")})$`);
   inst._zod.parse = (payload, _ctx) => {
-    const input = payload.value;
-    if (valuesSet.has(input)) {
+    const input2 = payload.value;
+    if (valuesSet.has(input2)) {
       return payload;
     }
     payload.issues.push({
       code: "invalid_value",
       values,
-      input,
+      input: input2,
       inst
     });
     return payload;
@@ -21230,14 +21230,14 @@ var $ZodLiteral = /* @__PURE__ */ $constructor("$ZodLiteral", (inst, def) => {
   inst._zod.values = values;
   inst._zod.pattern = new RegExp(`^(${def.values.map((o) => typeof o === "string" ? escapeRegex(o) : o ? escapeRegex(o.toString()) : String(o)).join("|")})$`);
   inst._zod.parse = (payload, _ctx) => {
-    const input = payload.value;
-    if (values.has(input)) {
+    const input2 = payload.value;
+    if (values.has(input2)) {
       return payload;
     }
     payload.issues.push({
       code: "invalid_value",
       values: def.values,
-      input,
+      input: input2,
       inst
     });
     return payload;
@@ -21246,13 +21246,13 @@ var $ZodLiteral = /* @__PURE__ */ $constructor("$ZodLiteral", (inst, def) => {
 var $ZodFile = /* @__PURE__ */ $constructor("$ZodFile", (inst, def) => {
   $ZodType.init(inst, def);
   inst._zod.parse = (payload, _ctx) => {
-    const input = payload.value;
-    if (input instanceof File)
+    const input2 = payload.value;
+    if (input2 instanceof File)
       return payload;
     payload.issues.push({
       expected: "file",
       code: "invalid_type",
-      input,
+      input: input2,
       inst
     });
     return payload;
@@ -21282,8 +21282,8 @@ var $ZodTransform = /* @__PURE__ */ $constructor("$ZodTransform", (inst, def) =>
     return payload;
   };
 });
-function handleOptionalResult(result, input) {
-  if (input === void 0 && (result.issues.length || result.fallback)) {
+function handleOptionalResult(result, input2) {
+  if (input2 === void 0 && (result.issues.length || result.fallback)) {
     return { issues: [], value: void 0 };
   }
   return result;
@@ -21301,11 +21301,11 @@ var $ZodOptional = /* @__PURE__ */ $constructor("$ZodOptional", (inst, def) => {
   });
   inst._zod.parse = (payload, ctx) => {
     if (def.innerType._zod.optin === "optional") {
-      const input = payload.value;
+      const input2 = payload.value;
       const result = def.innerType._zod.run(payload, ctx);
       if (result instanceof Promise)
-        return result.then((r) => handleOptionalResult(r, input));
-      return handleOptionalResult(result, input);
+        return result.then((r) => handleOptionalResult(r, input2));
+      return handleOptionalResult(result, input2);
     }
     if (payload.value === void 0) {
       return payload;
@@ -21730,20 +21730,20 @@ var $ZodCustom = /* @__PURE__ */ $constructor("$ZodCustom", (inst, def) => {
     return payload;
   };
   inst._zod.check = (payload) => {
-    const input = payload.value;
-    const r = def.fn(input);
+    const input2 = payload.value;
+    const r = def.fn(input2);
     if (r instanceof Promise) {
-      return r.then((r2) => handleRefineResult(r2, payload, input, inst));
+      return r.then((r2) => handleRefineResult(r2, payload, input2, inst));
     }
-    handleRefineResult(r, payload, input, inst);
+    handleRefineResult(r, payload, input2, inst);
     return;
   };
 });
-function handleRefineResult(result, payload, input, inst) {
+function handleRefineResult(result, payload, input2, inst) {
   if (!result) {
     const _iss = {
       code: "custom",
-      input,
+      input: input2,
       inst,
       // incorporates params.error into issue reporting
       path: [...inst._zod.def.path ?? []],
@@ -28431,23 +28431,23 @@ function _overwrite(tx) {
 }
 // @__NO_SIDE_EFFECTS__
 function _normalize(form) {
-  return /* @__PURE__ */ _overwrite((input) => input.normalize(form));
+  return /* @__PURE__ */ _overwrite((input2) => input2.normalize(form));
 }
 // @__NO_SIDE_EFFECTS__
 function _trim() {
-  return /* @__PURE__ */ _overwrite((input) => input.trim());
+  return /* @__PURE__ */ _overwrite((input2) => input2.trim());
 }
 // @__NO_SIDE_EFFECTS__
 function _toLowerCase() {
-  return /* @__PURE__ */ _overwrite((input) => input.toLowerCase());
+  return /* @__PURE__ */ _overwrite((input2) => input2.toLowerCase());
 }
 // @__NO_SIDE_EFFECTS__
 function _toUpperCase() {
-  return /* @__PURE__ */ _overwrite((input) => input.toUpperCase());
+  return /* @__PURE__ */ _overwrite((input2) => input2.toUpperCase());
 }
 // @__NO_SIDE_EFFECTS__
 function _slugify() {
-  return /* @__PURE__ */ _overwrite((input) => slugify(input));
+  return /* @__PURE__ */ _overwrite((input2) => slugify(input2));
 }
 // @__NO_SIDE_EFFECTS__
 function _array(Class2, element, params) {
@@ -28752,8 +28752,8 @@ function _stringbool(Classes, _params) {
     type: "pipe",
     in: stringSchema,
     out: booleanSchema,
-    transform: ((input, payload) => {
-      let data = input;
+    transform: ((input2, payload) => {
+      let data = input2;
       if (params.case !== "sensitive")
         data = data.toLowerCase();
       if (truthySet.has(data)) {
@@ -28772,8 +28772,8 @@ function _stringbool(Classes, _params) {
         return {};
       }
     }),
-    reverseTransform: ((input, _payload) => {
-      if (input === true) {
+    reverseTransform: ((input2, _payload) => {
+      if (input2 === true) {
         return truthyArray[0] || "true";
       } else {
         return falsyArray[0] || "false";
@@ -29669,9 +29669,9 @@ var allProcessors = {
   optional: optionalProcessor,
   lazy: lazyProcessor
 };
-function toJSONSchema(input, params) {
-  if ("_idmap" in input) {
-    const registry2 = input;
+function toJSONSchema(input2, params) {
+  if ("_idmap" in input2) {
+    const registry2 = input2;
     const ctx2 = initializeContext({ ...params, processors: allProcessors });
     const defs = {};
     for (const entry of registry2._idmap.entries()) {
@@ -29699,9 +29699,9 @@ function toJSONSchema(input, params) {
     return { schemas };
   }
   const ctx = initializeContext({ ...params, processors: allProcessors });
-  process2(input, ctx);
-  extractDefs(ctx, input);
-  return finalize(ctx, input);
+  process2(input2, ctx);
+  extractDefs(ctx, input2);
+  return finalize(ctx, input2);
 }
 
 // node_modules/zod/v4/core/json-schema-generator.js
@@ -32447,6 +32447,14 @@ function required2(name) {
   if (!value) throw new Error(`Falta la variable de entorno ${name}`);
   return value;
 }
+function input(name) {
+  return process.env[`INPUT_${name.replace(/ /g, "_").toUpperCase()}`];
+}
+function requiredInput(name) {
+  const value = input(name);
+  if (!value) throw new Error(`Falta el input ${name}`);
+  return value;
+}
 async function main() {
   const eventPath = required2("GITHUB_EVENT_PATH");
   const event = JSON.parse(await readFile4(eventPath, "utf8"));
@@ -32463,8 +32471,12 @@ async function main() {
     prNumber: event.pull_request.number,
     commitSha: event.pull_request.head.sha,
     workspace,
-    anthropic: new Anthropic({ apiKey: required2("ANTHROPIC_API_KEY") }),
-    octokit: new Octokit2({ auth: required2("GITHUB_TOKEN") }),
+    anthropic: new Anthropic({
+      apiKey: requiredInput("anthropic-api-key")
+    }),
+    octokit: new Octokit2({
+      auth: requiredInput("github-token")
+    }),
     policy: await loadPolicy(workspace),
     prompts: await loadPrompts(),
     detect: detectStack,
@@ -32476,6 +32488,8 @@ if (process.env["GITHUB_ACTIONS"] === "true") {
   await main();
 }
 export {
+  input,
   main,
+  requiredInput,
   runGate
 };

@@ -120,6 +120,20 @@ function required(name: string): string {
   return value;
 }
 
+// GitHub Actions expone cada input declarado en action.yml como una variable
+// de entorno `INPUT_<NOMBRE>`, en mayúsculas, con los espacios convertidos en
+// guiones bajos — pero los guiones se preservan tal cual. Es el mismo
+// comportamiento que implementa @actions/core.getInput().
+export function input(name: string): string | undefined {
+  return process.env[`INPUT_${name.replace(/ /g, '_').toUpperCase()}`];
+}
+
+export function requiredInput(name: string): string {
+  const value = input(name);
+  if (!value) throw new Error(`Falta el input ${name}`);
+  return value;
+}
+
 export async function main(): Promise<void> {
   const eventPath = required('GITHUB_EVENT_PATH');
   const event = JSON.parse(await readFile(eventPath, 'utf8')) as {
@@ -142,8 +156,12 @@ export async function main(): Promise<void> {
     prNumber: event.pull_request.number,
     commitSha: event.pull_request.head.sha,
     workspace,
-    anthropic: new Anthropic({ apiKey: required('ANTHROPIC_API_KEY') }) as unknown as AnthropicLike,
-    octokit: new Octokit({ auth: required('GITHUB_TOKEN') }) as unknown as OctokitLike & ReportOctokit,
+    anthropic: new Anthropic({
+      apiKey: requiredInput('anthropic-api-key'),
+    }) as unknown as AnthropicLike,
+    octokit: new Octokit({
+      auth: requiredInput('github-token'),
+    }) as unknown as OctokitLike & ReportOctokit,
     policy: await loadPolicy(workspace),
     prompts: await loadPrompts(),
     detect: detectStack,
