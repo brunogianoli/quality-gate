@@ -46,22 +46,32 @@ Fallan hacia el lado seguro o su impacto es acotado.
 
 ## Lo que falta de verdad
 
-Nada de lo anterior es lo más importante. **El sistema nunca corrió entero.**
-Los 120 tests de `npm test` corren con las dos APIs mockeadas, que es lo
-correcto para una suite unitaria, y los de integración ejecutan un repositorio
-real pero sólo la mitad determinista del gate: detectar el stack, correr build y
-tests, y calcular el veredicto.
+**El sistema ya corrió entero, contra PRs reales de este repositorio.** El
+criterio de éxito del spec está cumplido: la PR #4 recibió `FAIL` con dos
+findings sobre un bug plantado, un push con el arreglo la llevó a `PASS`, y el
+comentario se editó en lugar de duplicarse.
 
-Lo que sí se probó contra la API real, a mano, con un sondeo descartable: un
-auditor (`backend`, con su prompt real) encontró un bug plantado y devolvió un
-finding que valida contra el esquema, en 3,9 segundos. Eso confirma que el
-mecanismo de tool use forzado funciona y que los prompts producen algo útil.
+Esas corridas encontraron tres defectos que ninguna suite unitaria había
+detectado, todos ya resueltos: el `PASS` sin verificación, el input vacío que
+mandaba el tráfico al proveedor equivocado, y el ruido de severidad de los
+auditores.
 
-Lo que sigue sin ejecutarse nunca: **el pipeline completo, y GitHub.** Nadie
-corrió los seis auditores en paralelo contra una PR de verdad, ni publicó un
-comentario, ni creó un check run. Tampoco se sabe si los auditores generan ruido
-sobre cambios normales — un solo caso con un bug evidente no dice nada sobre
-falsos positivos, que es el invariante que más importa.
+Lo que falta ahora es distinto y más incómodo: **nada protege la calibración de
+los prompts.** `tests/golden/cases.ts` prueba `decide()` con findings escritos a
+mano; ningún test toca los prompts. El ruido que se corrigió en `_shared.md` se
+descubrió con un sondeo manual contra la API, y ese sondeo no quedó como red de
+seguridad: un cambio futuro en ese archivo puede reintroducir findings HIGH sobre
+código correcto sin que falle nada.
+
+Hace falta un golden set de prompts: casos fijos con llamadas reales, corriendo
+aparte como la suite de integración, que afirme propiedades estables — sobre un
+cambio limpio, cero bloqueantes; sobre un secreto commiteado, al menos un
+CRITICAL. Sin eso, el invariante de los falsos positivos depende de que alguien
+se acuerde de mirar.
+
+Tampoco se probó `scope` contra un diff que mezcla temas después de la
+calibración. Ahí fue donde alucinó (afirmó que el cambio declarado no estaba en
+el diff); la regla de citar evidencia apunta a eso, pero no está verificada.
 
 El criterio de éxito del spec sigue sin cumplirse: abrir una PR de verdad en el
 repositorio fixture, ver el gate correr solo, comentar el `FAIL`, y que un push
@@ -71,6 +81,27 @@ que es la única pregunta que define si este sistema sirve.
 
 ## Resueltos
 
+Los cuatro primeros salieron de las revisiones durante la construcción. Los
+cuatro últimos aparecieron corriendo el gate contra PRs reales, que es donde se
+ven las cosas que los mocks no muestran.
+
+- **Un `PASS` no exigía que ningún auditor hubiera corrido.** La API rechazó la
+  key, los cuatro auditores fallaron con 401, y el gate publicó 🟢 PASSED y
+  habilitó el merge sin que nadie mirara el código. Ahora eso degrada a `ERROR`
+  (check neutral, no bloquea). Un `FAIL` por build, tests o findings no degrada:
+  se sostiene con evidencia propia.
+- **Un input vacío de la Action pisaba su valor por defecto.** GitHub Actions
+  exporta `INPUT_<NOMBRE>` para todo input declarado aunque el workflow no lo
+  pase, como cadena vacía, y `??` no la cubre. El `baseURL` quedaba en `''`, el
+  SDK caía a `api.anthropic.com` y la key de DeepSeek parecía la culpable.
+- **Los auditores no tenían escala de severidad**, así que la inventaban:
+  `infrastructure` produjo tres HIGH bloqueantes cuyo propio texto decía que el
+  código estaba bien, y el mismo prompt daba resultados distintos entre corridas.
+  `agents/_shared.md` define la escala atada a consecuencia, declara que concluir
+  que algo es correcto no es un finding, y exige citar la línea del diff.
+- **El mismo defecto contaba dos veces.** Dos auditores reportaron el mismo bug
+  con una línea de diferencia y el comentario mostró dos problemas.
+  `dedupeFindings` los colapsa por archivo, severidad y proximidad.
 - **Los límites de paginación de la API de GitHub no se manejaban.**
   `src/context.ts` pedía `per_page: 300` a `pulls.listFiles` (el máximo real es
   100, así que truncaba el diff en silencio) y `src/report.ts` listaba
