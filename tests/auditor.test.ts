@@ -24,6 +24,8 @@ const policy: Policy = {
   required: ['build', 'tests'],
   blockOn: ['CRITICAL', 'HIGH'],
   minConfidence: 0.7,
+  timeoutMs: 5 * 60 * 1000,
+  maxRetries: 1,
   onTestFailure: { runAuditors: [] },
   auditors: { scope: { when: 'always', effort: 'low' } },
 };
@@ -108,5 +110,38 @@ describe('runAuditor', () => {
     });
 
     expect(result.auditor).toBe('security');
+  });
+
+  it('pasa el timeout y los reintentos como opciones de la llamada', async () => {
+    // Sin esto el comportamiento es el del SDK (10 minutos, 2 reintentos), que
+    // no es lo que la política declara y no se puede ajustar por auditor.
+    const parse = vi.fn().mockResolvedValue({
+      parsed_output: { auditor: 'scope', status: 'PASS', findings: [] },
+    });
+    const client = { messages: { parse } } as unknown as AnthropicLike;
+
+    await runAuditor({ client, name: 'scope', prompt: 'p', sharedContext: 'c', policy });
+
+    expect(parse.mock.calls[0]?.[1]).toEqual({ timeout: 5 * 60 * 1000, maxRetries: 1 });
+  });
+
+  it('un auditor puede pisar el timeout y los reintentos de la política', async () => {
+    const parse = vi.fn().mockResolvedValue({
+      parsed_output: { auditor: 'backend', status: 'PASS', findings: [] },
+    });
+    const client = { messages: { parse } } as unknown as AnthropicLike;
+
+    await runAuditor({
+      client,
+      name: 'backend',
+      prompt: 'p',
+      sharedContext: 'c',
+      policy: {
+        ...policy,
+        auditors: { backend: { when: 'always', timeoutMs: 60_000, maxRetries: 3 } },
+      },
+    });
+
+    expect(parse.mock.calls[0]?.[1]).toEqual({ timeout: 60_000, maxRetries: 3 });
   });
 });

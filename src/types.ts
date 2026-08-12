@@ -78,6 +78,8 @@ export interface AuditorPolicy {
   when: 'always' | 'criteria_available' | Trigger[];
   effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
   model?: string;
+  timeoutMs?: number;
+  maxRetries?: number;
 }
 
 export interface Policy {
@@ -85,6 +87,13 @@ export interface Policy {
   required: Array<'build' | 'tests'>;
   blockOn: Severity[];
   minConfidence: number;
+  // Milisegundos por auditor. Un auditor colgado no puede quedarse con el
+  // presupuesto del job entero: al vencer, la llamada falla y el auditor
+  // aporta un error, que degrada a ERROR y no bloquea el merge.
+  timeoutMs: number;
+  // Reintentos ante 429 y 5xx, con backoff exponencial del SDK. Uno alcanza:
+  // absorbe un pico de rate limit sin multiplicar el gasto si la API está caída.
+  maxRetries: number;
   onTestFailure: { runAuditors: string[] };
   auditors: Record<string, AuditorPolicy>;
 }

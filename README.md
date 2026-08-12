@@ -51,11 +51,17 @@ del default, el resto se hereda:
 
 ```yaml
 min_confidence: 0.8        # más estricto: menos findings bloquean
+timeout_ms: 300000         # por auditor, no por corrida
+max_retries: 1             # ante 429 y 5xx, con backoff exponencial
 
 auditors:
   security:
     model: claude-opus-5   # un modelo más capaz sólo para este auditor
+    timeout_ms: 600000     # y más tiempo, porque piensa más
 ```
+
+Si un auditor se pasa del timeout, su llamada falla y el comentario lo informa
+como resultado parcial: el veredicto degrada a `ERROR`, que no bloquea el merge.
 
 ## Criterios de aceptación
 

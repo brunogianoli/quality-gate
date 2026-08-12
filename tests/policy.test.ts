@@ -10,6 +10,8 @@ const policy: Policy = {
   required: ['build', 'tests'],
   blockOn: ['CRITICAL', 'HIGH'],
   minConfidence: 0.7,
+  timeoutMs: 5 * 60 * 1000,
+  maxRetries: 1,
   onTestFailure: { runAuditors: ['scope', 'acceptance'] },
   auditors: {},
 };
@@ -98,6 +100,12 @@ describe('loadPolicy', () => {
     expect(p.auditors['scope']?.when).toBe('always');
   });
 
+  it('declara el timeout y los reintentos en vez de heredar los del SDK', async () => {
+    const p = await loadPolicy(process.cwd());
+    expect(p.timeoutMs).toBe(5 * 60 * 1000);
+    expect(p.maxRetries).toBe(1);
+  });
+
   describe('override del consumidor (.ai/policy.yaml)', () => {
     let dir: string;
 
@@ -108,6 +116,19 @@ describe('loadPolicy', () => {
 
     afterEach(async () => {
       await rm(dir, { recursive: true, force: true });
+    });
+
+    it('traduce el timeout y los reintentos de un auditor a los nombres del tipo', async () => {
+      // El YAML habla snake_case y `AuditorPolicy` camelCase. Sin la traducción
+      // el override entra como un campo que nadie lee y el auditor corre con el
+      // default, en silencio.
+      await writeFile(
+        join(dir, '.ai', 'policy.yaml'),
+        'auditors:\n  backend:\n    when: always\n    timeout_ms: 60000\n    max_retries: 3\n',
+      );
+      const p = await loadPolicy(dir);
+      expect(p.auditors['backend']?.timeoutMs).toBe(60000);
+      expect(p.auditors['backend']?.maxRetries).toBe(3);
     });
 
     it('hereda del default lo que un override válido no pisa', async () => {

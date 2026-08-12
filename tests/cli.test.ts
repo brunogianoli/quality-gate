@@ -8,6 +8,8 @@ const policy: Policy = {
   required: ['build', 'tests'],
   blockOn: ['CRITICAL', 'HIGH'],
   minConfidence: 0.7,
+  timeoutMs: 5 * 60 * 1000,
+  maxRetries: 1,
   onTestFailure: { runAuditors: ['scope', 'acceptance'] },
   auditors: {
     acceptance: { when: 'criteria_available' },

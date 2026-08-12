@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import { z } from 'zod';
 import { SEVERITIES } from './types.js';
-import type { Decision, Finding, Policy, RunnerResult } from './types.js';
+import type { AuditorPolicy, Decision, Finding, Policy, RunnerResult } from './types.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -28,6 +28,8 @@ const AuditorPolicySchema = z.object({
   when: z.union([z.literal('always'), z.literal('criteria_available'), z.array(TriggerSchema)]),
   effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
   model: z.string().optional(),
+  timeout_ms: z.number().int().positive().optional(),
+  max_retries: z.number().int().min(0).optional(),
 });
 
 const RawPolicySchema = z.object({
@@ -35,6 +37,8 @@ const RawPolicySchema = z.object({
   required: z.array(z.enum(['build', 'tests'])).optional(),
   block_on: z.array(z.enum(SEVERITIES)).optional(),
   min_confidence: z.number().min(0).max(1).optional(),
+  timeout_ms: z.number().int().positive().optional(),
+  max_retries: z.number().int().min(0).optional(),
   on_test_failure: z.object({ run_auditors: z.array(z.string()).optional() }).optional(),
   auditors: z.record(z.string(), AuditorPolicySchema).optional(),
 });
@@ -55,16 +59,35 @@ function parsePolicy(source: string, label: string): RawPolicy {
   return result.data;
 }
 
+// El YAML habla snake_case y los tipos camelCase. Sin esta traducción explícita
+// un `timeout_ms:` del repo consumidor se asignaría a un campo que nadie lee, y
+// el auditor correría con el default sin que nada avise.
+function normalizeAuditors(raw: RawPolicy['auditors']): Record<string, AuditorPolicy> {
+  const auditors: Record<string, AuditorPolicy> = {};
+  for (const [name, cfg] of Object.entries(raw ?? {})) {
+    auditors[name] = {
+      when: cfg.when,
+      effort: cfg.effort,
+      model: cfg.model,
+      timeoutMs: cfg.timeout_ms,
+      maxRetries: cfg.max_retries,
+    };
+  }
+  return auditors;
+}
+
 function normalize(raw: RawPolicy, base?: Policy): Policy {
   return {
     model: raw.model ?? base?.model ?? 'claude-sonnet-5',
     required: raw.required ?? base?.required ?? ['build', 'tests'],
     blockOn: raw.block_on ?? base?.blockOn ?? ['CRITICAL', 'HIGH'],
     minConfidence: raw.min_confidence ?? base?.minConfidence ?? 0.7,
+    timeoutMs: raw.timeout_ms ?? base?.timeoutMs ?? 5 * 60 * 1000,
+    maxRetries: raw.max_retries ?? base?.maxRetries ?? 1,
     onTestFailure: {
       runAuditors: raw.on_test_failure?.run_auditors ?? base?.onTestFailure.runAuditors ?? [],
     },
-    auditors: raw.auditors ?? base?.auditors ?? {},
+    auditors: raw.auditors ? normalizeAuditors(raw.auditors) : (base?.auditors ?? {}),
   };
 }
 

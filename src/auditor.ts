@@ -1,9 +1,17 @@
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { AuditorResultSchema, type AuditContext, type AuditorResult, type Policy } from './types.js';
 
+export interface RequestOptions {
+  timeout: number;
+  maxRetries: number;
+}
+
 export interface AnthropicLike {
   messages: {
-    parse(args: Record<string, unknown>): Promise<{ parsed_output: unknown }>;
+    parse(
+      args: Record<string, unknown>,
+      options?: RequestOptions,
+    ): Promise<{ parsed_output: unknown }>;
   };
 }
 
@@ -59,24 +67,32 @@ export async function runAuditor(deps: RunAuditorDeps): Promise<AuditorResult> {
   const { client, name, prompt, sharedContext, policy } = deps;
   const cfg = policy.auditors[name];
 
-  const response = await client.messages.parse({
-    model: cfg?.model ?? policy.model,
-    max_tokens: 16000,
-    output_config: {
-      effort: cfg?.effort ?? 'high',
-      format: zodOutputFormat(AuditorResultSchema),
-    },
-    system: [
-      { type: 'text', text: sharedContext, cache_control: { type: 'ephemeral' } },
-      { type: 'text', text: prompt },
-    ],
-    messages: [
-      {
-        role: 'user',
-        content: `Auditá este cambio siguiendo tu contrato. Tu campo "auditor" debe ser exactamente "${name}".`,
+  const response = await client.messages.parse(
+    {
+      model: cfg?.model ?? policy.model,
+      max_tokens: 16000,
+      output_config: {
+        effort: cfg?.effort ?? 'high',
+        format: zodOutputFormat(AuditorResultSchema),
       },
-    ],
-  });
+      system: [
+        { type: 'text', text: sharedContext, cache_control: { type: 'ephemeral' } },
+        { type: 'text', text: prompt },
+      ],
+      messages: [
+        {
+          role: 'user',
+          content: `Auditá este cambio siguiendo tu contrato. Tu campo "auditor" debe ser exactamente "${name}".`,
+        },
+      ],
+    },
+    // El SDK reintenta 429 y 5xx con backoff exponencial; declararlo acá hace
+    // que los valores salgan de la política y no de sus defaults.
+    {
+      timeout: cfg?.timeoutMs ?? policy.timeoutMs,
+      maxRetries: cfg?.maxRetries ?? policy.maxRetries,
+    },
+  );
 
   const parsed = AuditorResultSchema.safeParse(response.parsed_output);
   if (!parsed.success) {

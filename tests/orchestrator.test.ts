@@ -15,6 +15,8 @@ const policy: Policy = {
   required: ['build', 'tests'],
   blockOn: ['CRITICAL', 'HIGH'],
   minConfidence: 0.7,
+  timeoutMs: 5 * 60 * 1000,
+  maxRetries: 1,
   onTestFailure: { runAuditors: [] },
   auditors: { scope: { when: 'always' }, backend: { when: 'always' }, security: { when: 'always' } },
 };

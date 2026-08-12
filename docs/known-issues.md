@@ -9,12 +9,8 @@ está en el historial de git de la rama `feat/quality-gate`.
 
 ## Atender pronto
 
-### La política se valida, pero el timeout y el reintento son los del SDK
-
-El spec pide timeout por auditor y un reintento con backoff. No están
-implementados de forma explícita: el comportamiento depende de los valores por
-defecto del SDK de Anthropic. Es una degradación razonable, no un vacío, pero es
-una diferencia con lo que el spec declara.
+Nada pendiente: los cuatro hallazgos de esta sección están resueltos y
+registrados abajo.
 
 ## Aceptables
 
@@ -51,7 +47,7 @@ Fallan hacia el lado seguro o su impacto es acotado.
 ## Lo que falta de verdad
 
 Nada de lo anterior es lo más importante. **El sistema nunca habló con la API de
-Anthropic ni con GitHub.** Los 112 tests de `npm test` corren con ambas
+Anthropic ni con GitHub.** Los 116 tests de `npm test` corren con ambas
 mockeadas, que es lo correcto para una suite unitaria. Los de integración sí
 ejecutan un repositorio real, pero sólo la mitad determinista del gate: detectar
 el stack, correr build y tests, y calcular el veredicto. Los auditores —la parte
@@ -82,3 +78,9 @@ que es la única pregunta que define si este sistema sirve.
   con un error de tipos (corta en el build sin llegar a los tests, `FAIL`).
   Necesita red y tarda ~1 minuto, así que corre con `npm run test:integration` y
   en su propio job de CI, fuera de `npm test`.
+- **El timeout y el reintento eran los del SDK.** La política ahora declara
+  `timeout_ms` (5 minutos) y `max_retries` (1), pisables por auditor, y
+  `runAuditor` los pasa como opciones de la llamada en vez de heredar los
+  defaults del SDK (10 minutos, 2 reintentos). El backoff exponencial sigue
+  siendo el del SDK. El tercer punto que el spec pedía en la misma frase,
+  `concurrency: cancel-in-progress`, ya estaba en el workflow del README.

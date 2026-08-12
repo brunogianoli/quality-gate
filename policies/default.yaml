@@ -9,6 +9,10 @@ comment_only: [MEDIUM, LOW, INFO]
 
 min_confidence: 0.7
 
+# Por auditor, no por corrida. Se puede pisar dentro de cada `auditors:`.
+timeout_ms: 300000
+max_retries: 1
+
 on_test_failure:
   run_auditors: [scope, acceptance]
 
