@@ -112,6 +112,45 @@ describe('runGate', () => {
     expect(called.sort()).toEqual(['acceptance', 'scope']);
   });
 
+  it('no aprueba cuando ningún auditor pudo correr', async () => {
+    // Encontrado corriendo el gate de verdad: con la API rechazando la key,
+    // los cuatro auditores fallaron y el veredicto salió PASS en verde. Nadie
+    // miró el código y el sistema habilitó el merge — exactamente lo que este
+    // producto existe para impedir. Un outage tiene que degradar a ERROR
+    // (neutral, no bloquea), nunca a PASS.
+    const anthropic = {
+      messages: {
+        create: vi.fn(async () => {
+          throw new Error('401 invalid x-api-key');
+        }),
+      },
+    } as unknown as LlmClient;
+
+    const d = await runGate(deps({ anthropic }));
+
+    expect(d.verdict).toBe('ERROR');
+    expect(d.reason).toMatch(/auditor/i);
+  });
+
+  it('sigue dando un veredicto real si al menos un auditor corrió', async () => {
+    // Degradación parcial: con uno vivo hay verificación real, así que el
+    // veredicto se calcula y el comentario informa a los que fallaron.
+    const anthropic = {
+      messages: {
+        create: vi.fn(async (args: Record<string, unknown>) => {
+          const msgs = args['messages'] as Array<{ content: string }>;
+          const name = /exactamente "([a-z]+)"/.exec(msgs[0]!.content)?.[1] ?? 'x';
+          if (name !== 'scope') throw new Error('503 overloaded');
+          return { content: [{ type: 'tool_use', input: { auditor: name, status: 'PASS', findings: [] } }] };
+        }),
+      },
+    } as unknown as LlmClient;
+
+    const d = await runGate(deps({ anthropic }));
+
+    expect(d.verdict).toBe('PASS');
+  });
+
   it('devuelve ERROR sin lanzar cuando GitHub falla', async () => {
     const d = await runGate(
       deps({
@@ -233,5 +272,17 @@ describe('input() / requiredInput() — lectura de inputs de la Action', () => {
     expect(input('github-token')).toBeUndefined();
     expect(() => requiredInput('anthropic-api-key')).toThrow('Falta el input anthropic-api-key');
     expect(() => requiredInput('github-token')).toThrow('Falta el input github-token');
+  });
+
+  it('trata un input vacío como ausente', () => {
+    // El runner exporta INPUT_<NOMBRE> para todo input declarado en action.yml,
+    // aunque el workflow no lo pase: llega como cadena vacía. Devolverla hace
+    // que `?? valorPorDefecto` no se active, y un input opcional que nadie usó
+    // termina pisando el default con ''.
+    process.env['INPUT_GITHUB-TOKEN'] = '';
+    expect(input('github-token')).toBeUndefined();
+
+    process.env['INPUT_GITHUB-TOKEN'] = '   ';
+    expect(input('github-token')).toBeUndefined();
   });
 });
