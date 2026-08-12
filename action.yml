@@ -1,0 +1,20 @@
+name: 'AI Quality Gate'
+description: 'Audita cada PR con auditores de IA especializados y bloquea el merge hasta que pase.'
+author: 'brunogianoli'
+
+inputs:
+  anthropic-api-key:
+    description: 'API key de Anthropic para los auditores.'
+    required: true
+  github-token:
+    description: 'Token con permiso para comentar y crear checks.'
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: 'node24'
+  main: 'dist/index.js'
+
+branding:
+  icon: 'shield'
+  color: 'purple'

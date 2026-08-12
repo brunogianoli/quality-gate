@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { runGate, type GateDeps } from '../src/cli.js';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { runGate, input, requiredInput, type GateDeps } from '../src/cli.js';
 import type { AnthropicLike } from '../src/auditor.js';
 import type { Policy } from '../src/types.js';
 
@@ -139,5 +139,48 @@ describe('runGate', () => {
     await runGate(d);
     expect(d.octokit.issues.createComment).toHaveBeenCalledOnce();
     expect(d.octokit.checks.create).toHaveBeenCalledOnce();
+  });
+});
+
+// Regresión: GitHub Actions expone los inputs declarados en action.yml como
+// `INPUT_<NOMBRE-EN-MAYUSCULAS>` (guiones preservados, no convertidos a guión
+// bajo) — nunca como la variable "a secas". `main()` construía el Anthropic y
+// el Octokit leyendo `ANTHROPIC_API_KEY` y `GITHUB_TOKEN` directamente, que el
+// runner nunca inyecta así. Siguiendo el propio snippet del README, la Action
+// moría en el primer `required()`.
+describe('input() / requiredInput() — lectura de inputs de la Action', () => {
+  const ENV_KEYS = [
+    'INPUT_ANTHROPIC-API-KEY',
+    'INPUT_GITHUB-TOKEN',
+    'ANTHROPIC_API_KEY',
+    'GITHUB_TOKEN',
+  ];
+
+  afterEach(() => {
+    for (const key of ENV_KEYS) delete process.env[key];
+  });
+
+  it('lee anthropic-api-key y github-token desde INPUT_<NOMBRE>, con los guiones intactos', () => {
+    process.env['INPUT_ANTHROPIC-API-KEY'] = 'sk-ant-from-input';
+    process.env['INPUT_GITHUB-TOKEN'] = 'ghp-from-input';
+
+    expect(input('anthropic-api-key')).toBe('sk-ant-from-input');
+    expect(input('github-token')).toBe('ghp-from-input');
+    expect(requiredInput('anthropic-api-key')).toBe('sk-ant-from-input');
+    expect(requiredInput('github-token')).toBe('ghp-from-input');
+  });
+
+  it('no encuentra el input si sólo existe la variable a secas (el bug original)', () => {
+    // Sin el prefijo INPUT_: exactamente lo que exponía el runner antes del
+    // fix. Si `input()` volviera a leer `process.env[name]` en vez de
+    // `process.env['INPUT_' + name...]`, esta aserción pasaría a ver
+    // 'bare-value' en vez de `undefined` y el test fallaría.
+    process.env['ANTHROPIC_API_KEY'] = 'bare-value';
+    process.env['GITHUB_TOKEN'] = 'bare-value';
+
+    expect(input('anthropic-api-key')).toBeUndefined();
+    expect(input('github-token')).toBeUndefined();
+    expect(() => requiredInput('anthropic-api-key')).toThrow('Falta el input anthropic-api-key');
+    expect(() => requiredInput('github-token')).toThrow('Falta el input github-token');
   });
 });
