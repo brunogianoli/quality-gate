@@ -13,6 +13,11 @@ npm test                    # suite unitaria: sin red, ~8s
 npm test -- tests/policy.test.ts   # un solo archivo
 npm test -- -t "decide"     # los tests cuyo nombre matchea
 npm run test:integration    # corre el gate contra fixture/ de verdad: red, ~1min
+npm run test:prompts        # golden set de prompts: llama a la API, ~20s
+                            # necesita DEEPSEEK_API_KEY (un .env sirve:
+                            # node --env-file=.env ...). Correlo ante cualquier
+                            # cambio en agents/ — es lo único que detecta que un
+                            # prompt volvió a bloquear código correcto.
 npm run typecheck           # tsc --noEmit
 npm run build               # regenera dist/index.js (va commiteado)
 ```

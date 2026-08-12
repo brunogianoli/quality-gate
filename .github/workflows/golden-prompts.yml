@@ -1,0 +1,37 @@
+name: Golden set de prompts
+
+# Llama a la API de verdad, así que no corre en cada PR: sólo cuando cambia algo
+# que puede alterar lo que los auditores reportan. Es la única red que protege la
+# calibración de severidad — sin esto, un cambio en agents/ puede reintroducir
+# findings bloqueantes sobre código correcto sin que falle nada.
+on:
+  pull_request:
+    paths:
+      - 'agents/**'
+      - 'src/auditor.ts'
+      - 'src/prompts.ts'
+      - 'src/policy.ts'
+      - 'policies/**'
+      - 'tests/golden-prompts/**'
+      - '.github/workflows/golden-prompts.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: golden-prompts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  golden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run test:prompts
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}

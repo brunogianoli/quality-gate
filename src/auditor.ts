@@ -87,6 +87,37 @@ export interface RunAuditorDeps {
 export async function runAuditor(deps: RunAuditorDeps): Promise<AuditorResult> {
   const { client, name, prompt, sharedContext, policy } = deps;
   const cfg = policy.auditors[name];
+  const maxRetries = cfg?.maxRetries ?? policy.maxRetries;
+
+  // El proveedor devuelve, cada tanto, un 200 con la herramienta llamada sin
+  // argumentos o con la estructura incompleta. Para el SDK eso es una respuesta
+  // exitosa, así que sus reintentos —que cubren 429 y 5xx— no aplican, y sin
+  // este bucle se pierde el aporte del auditor entero por un error transitorio.
+  let ultimoError: Error | null = null;
+
+  for (let intento = 0; intento <= maxRetries; intento++) {
+    try {
+      return await intentarAuditoria(deps, cfg);
+    } catch (err) {
+      // Sólo se reintenta una respuesta mal formada. Un fallo de la API ya viene
+      // reintentado por el SDK: repetirlo acá multiplicaría el gasto durante un
+      // outage, que es justo cuando conviene rendirse y degradar a ERROR.
+      if (!(err instanceof RespuestaInvalidaError)) throw err;
+      ultimoError = err;
+    }
+  }
+
+  throw ultimoError ?? new Error(`El auditor ${name} no pudo completarse.`);
+}
+
+/** La respuesta llegó, pero no tiene la forma del contrato. Se puede reintentar. */
+class RespuestaInvalidaError extends Error {}
+
+async function intentarAuditoria(
+  deps: RunAuditorDeps,
+  cfg: Policy['auditors'][string] | undefined,
+): Promise<AuditorResult> {
+  const { client, name, prompt, sharedContext, policy } = deps;
 
   const response = await client.messages.create(
     {
@@ -125,14 +156,16 @@ export async function runAuditor(deps: RunAuditorDeps): Promise<AuditorResult> {
   const reporte = response.content.find((block) => block.type === 'tool_use');
   if (!reporte) {
     const tipos = response.content.map((block) => block.type).join(', ') || 'ninguno';
-    throw new Error(
+    throw new RespuestaInvalidaError(
       `El auditor ${name} no usó la herramienta para reportar: la respuesta trajo ${tipos}.`,
     );
   }
 
   const parsed = AuditorResultSchema.safeParse(reporte.input);
   if (!parsed.success) {
-    throw new Error(`El auditor ${name} devolvió una respuesta inválida: ${parsed.error.message}`);
+    throw new RespuestaInvalidaError(
+      `El auditor ${name} devolvió una respuesta inválida: ${parsed.error.message}`,
+    );
   }
 
   return { ...parsed.data, auditor: name };

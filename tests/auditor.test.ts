@@ -147,6 +147,64 @@ describe('runAuditor', () => {
     expect(result.auditor).toBe('security');
   });
 
+  it('reintenta cuando el modelo contesta sin usar la herramienta', async () => {
+    // Visto en el golden set: cada tanto el proveedor devuelve un 200 con la
+    // estructura incompleta. El SDK reintenta errores HTTP, pero esto no lo es,
+    // así que sin reintento acá se pierde el aporte de ese auditor entero.
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Para auditar necesito más...' }] })
+      .mockResolvedValueOnce(conHerramienta(resultadoOk));
+    const client = { messages: { create } } as unknown as LlmClient;
+
+    const result = await runAuditor({ client, name: 'scope', prompt: 'p', sharedContext: 'c', policy });
+
+    expect(result.status).toBe('PASS');
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('reintenta cuando lo reportado no valida contra el esquema', async () => {
+    const create = vi
+      .fn()
+      .mockResolvedValueOnce(conHerramienta({}))
+      .mockResolvedValueOnce(conHerramienta(resultadoOk));
+    const client = { messages: { create } } as unknown as LlmClient;
+
+    const result = await runAuditor({ client, name: 'scope', prompt: 'p', sharedContext: 'c', policy });
+
+    expect(result.status).toBe('PASS');
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('se rinde después de agotar los reintentos de la política', async () => {
+    const create = vi.fn().mockResolvedValue(conHerramienta({}));
+    const client = { messages: { create } } as unknown as LlmClient;
+
+    await expect(
+      runAuditor({ client, name: 'scope', prompt: 'p', sharedContext: 'c', policy }),
+    ).rejects.toThrow(/scope/);
+
+    // maxRetries: 1 en la política → un intento más el reintento.
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it('no reintenta si la política no lo permite', async () => {
+    const create = vi.fn().mockResolvedValue(conHerramienta({}));
+    const client = { messages: { create } } as unknown as LlmClient;
+
+    await expect(
+      runAuditor({
+        client,
+        name: 'scope',
+        prompt: 'p',
+        sharedContext: 'c',
+        policy: { ...policy, maxRetries: 0 },
+      }),
+    ).rejects.toThrow(/scope/);
+
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
   it('pasa el timeout y los reintentos como opciones de la llamada', async () => {
     const create = vi.fn().mockResolvedValue(conHerramienta(resultadoOk));
     const client = { messages: { create } } as unknown as LlmClient;
