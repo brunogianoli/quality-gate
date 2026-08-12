@@ -55,6 +55,7 @@ export function renderComment(deps: RenderCommentDeps): string {
     '',
   ];
 
+  if (ctx.runner.install) parts.push(`**Install:** ${ctx.runner.install.ok ? 'ok' : 'falló'}`);
   if (ctx.runner.build) parts.push(`**Build:** ${ctx.runner.build.ok ? 'ok' : 'falló'}`);
   if (ctx.runner.test) parts.push(`**Tests:** ${ctx.runner.test.ok ? 'ok' : 'fallaron'}`);
   parts.push(`**Auditores:** ${auditors.length > 0 ? auditors.join(' · ') : 'ninguno'}`);
@@ -75,8 +76,15 @@ export function renderComment(deps: RenderCommentDeps): string {
     parts.push('', '---', '', '<details><summary>Findings informativos (no bloquean)</summary>', '', ...decision.informational.map(renderFinding), '', '</details>');
   }
 
-  if (decision.verdict === 'FAIL' && !ctx.runner.test?.ok && ctx.runner.test) {
-    parts.push('', '```', ctx.runner.test.output, '```');
+  // El paso que efectivamente falló es el que aporta información: el runner
+  // corta en el primer fallo (install → build → test), así que a lo sumo uno
+  // de los tres está en `!ok`. Volcar su output completo es lo que le permite
+  // al agente que lee el comentario corregir sin adivinar.
+  const failedStep = [ctx.runner.install, ctx.runner.build, ctx.runner.test].find(
+    (step) => step !== null && !step.ok,
+  );
+  if (decision.verdict === 'FAIL' && failedStep) {
+    parts.push('', '```', failedStep.output, '```');
   }
 
   return parts.join('\n');

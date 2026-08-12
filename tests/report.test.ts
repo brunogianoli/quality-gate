@@ -70,6 +70,46 @@ describe('renderComment', () => {
     expect(body).toContain('503');
     expect(body).toContain('no pudieron ejecutarse');
   });
+
+  it('vuelca el output de install en el comentario cuando install falló', () => {
+    const installCtx: AuditContext = {
+      ...ctx,
+      runner: {
+        install: { ok: false, exitCode: 1, output: 'npm ERR! code EUSAGE\nnpm ERR! `npm ci` requires package-lock.json' },
+        build: null,
+        test: null,
+      },
+    };
+    const installDecision: Decision = {
+      verdict: 'FAIL',
+      blocking: [],
+      informational: [],
+      reason: 'La instalación de dependencias falló.',
+    };
+    const body = renderComment({ ctx: installCtx, decision: installDecision, auditors: [], errors: [] });
+    expect(body).toContain('**Install:** falló');
+    expect(body).toContain('npm ERR! `npm ci` requires package-lock.json');
+  });
+
+  it('vuelca el output de build en el comentario cuando el build falló', () => {
+    const buildCtx: AuditContext = {
+      ...ctx,
+      runner: {
+        install: { ok: true, exitCode: 0, output: '' },
+        build: { ok: false, exitCode: 1, output: "src/index.ts(3,7): error TS2322: Type 'string' is not assignable to type 'number'." },
+        test: null,
+      },
+    };
+    const buildDecision: Decision = {
+      verdict: 'FAIL',
+      blocking: [],
+      informational: [],
+      reason: 'El build falló.',
+    };
+    const body = renderComment({ ctx: buildCtx, decision: buildDecision, auditors: [], errors: [] });
+    expect(body).toContain('**Build:** falló');
+    expect(body).toContain("error TS2322: Type 'string' is not assignable to type 'number'.");
+  });
 });
 
 describe('upsertComment', () => {
