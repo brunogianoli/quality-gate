@@ -1,4 +1,4 @@
-model: claude-sonnet-5
+model: deepseek-chat
 
 required:
   - build
@@ -21,7 +21,6 @@ auditors:
     when: criteria_available
   scope:
     when: always
-    effort: low
   backend:
     when: [backend_changed]
   database:

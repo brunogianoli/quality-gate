@@ -76,7 +76,8 @@ export type Trigger =
 
 export interface AuditorPolicy {
   when: 'always' | 'criteria_available' | Trigger[];
-  effort?: 'low' | 'medium' | 'high' | 'xhigh' | 'max';
+  // No hay equivalente de `effort`: para que un auditor razone más, se le
+  // asigna un modelo más capaz con `model`.
   model?: string;
   timeoutMs?: number;
   maxRetries?: number;

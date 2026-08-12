@@ -62,13 +62,20 @@ Romper cualquiera de estos convierte el producto en otra cosa:
 
 - **`fetch-depth: 0` en el checkout.** Sin el historial completo no se puede calcular el diff de la PR.
 
-- **PRs desde forks no reciben secrets**, así que no hay `ANTHROPIC_API_KEY` y el gate no corre. Para repos propios con ramas internas no importa. No "resolverlo" con `pull_request_target`: eso ejecuta código no confiable con acceso a los secrets.
+- **PRs desde forks no reciben secrets**, así que no hay `DEEPSEEK_API_KEY` y el gate no corre. Para repos propios con ramas internas no importa. No "resolverlo" con `pull_request_target`: eso ejecuta código no confiable con acceso a los secrets.
 
 ## Stack
 
-TypeScript sobre Node.js. Octokit para GitHub, el SDK de Anthropic para los auditores, Vitest para los tests del propio sistema. Los auditores corren en `claude-sonnet-5`, configurable por auditor en `policy.yaml`.
+TypeScript sobre Node.js. Octokit para GitHub, Vitest para los tests del propio sistema.
 
-Al escribir código que llame a la API de Anthropic, cargar la skill `claude-api` antes — los IDs de modelo, el precio y la forma de forzar JSON (structured outputs vía `output_config.format`, no tool use) cambian seguido y no deben escribirse de memoria.
+**El proveedor de los auditores es DeepSeek, no Anthropic.** Se usa el SDK `@anthropic-ai/sdk` porque DeepSeek expone su API con el formato de Anthropic, pero apuntado a `https://api.deepseek.com/anthropic` (`DEEPSEEK_BASE_URL` en `cli.ts`, pisable con el input `api-base-url`). Los auditores corren en `deepseek-chat`, configurable por auditor en `policy.yaml`.
+
+Dos consecuencias de que la compatibilidad sea parcial:
+
+- **La estructura se fuerza con tool use, no con structured outputs.** `output_config.format` es aceptado y después **ignorado en silencio**: el modelo contesta prosa y el que falla es el parser del SDK. `runAuditor` declara una sola herramienta con `tool_choice` forzado y lee el bloque `tool_use`. El `input_schema` se deriva de `AuditorResultSchema` con `z.toJSONSchema()` para que el contrato declarado y el validado no puedan divergir.
+- **`effort` no existe.** Para que un auditor razone más se le asigna otro modelo con `model` (`deepseek-reasoner`).
+
+No cargar la skill `claude-api` para el código de los auditores: documenta la API de Anthropic, y acá el proveedor es otro.
 
 ## Idioma
 

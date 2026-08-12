@@ -3,7 +3,7 @@ import { Octokit } from '@octokit/rest';
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { selectAuditors } from './analyzer.js';
-import { renderSharedContext, type AnthropicLike } from './auditor.js';
+import { renderSharedContext, type LlmClient } from './auditor.js';
 import { buildContext, type OctokitLike } from './context.js';
 import { runAuditors } from './orchestrator.js';
 import { decide, loadPolicy } from './policy.js';
@@ -19,7 +19,7 @@ export interface GateDeps {
   prNumber: number;
   commitSha: string;
   workspace: string;
-  anthropic: AnthropicLike;
+  anthropic: LlmClient;
   octokit: OctokitLike & ReportOctokit;
   loadPolicy: (dir: string) => Promise<Policy>;
   prompts: Record<string, string>;
@@ -131,6 +131,10 @@ function required(name: string): string {
   return value;
 }
 
+// Endpoint de DeepSeek que habla el formato de la API de Anthropic. Se puede
+// pisar con el input `api-base-url` para apuntar a otro proveedor compatible.
+export const DEEPSEEK_BASE_URL = 'https://api.deepseek.com/anthropic';
+
 // GitHub Actions expone cada input declarado en action.yml como una variable
 // de entorno `INPUT_<NOMBRE>`, en mayúsculas, con los espacios convertidos en
 // guiones bajos — pero los guiones se preservan tal cual. Es el mismo
@@ -167,9 +171,13 @@ export async function main(): Promise<void> {
     prNumber: event.pull_request.number,
     commitSha: event.pull_request.head.sha,
     workspace,
+    // El SDK es el de Anthropic porque DeepSeek expone su API con ese mismo
+    // formato. Lo que no cubre son los structured outputs por esquema: por eso
+    // `runAuditor` pide el resultado con una herramienta forzada.
     anthropic: new Anthropic({
-      apiKey: requiredInput('anthropic-api-key'),
-    }) as unknown as AnthropicLike,
+      apiKey: requiredInput('deepseek-api-key'),
+      baseURL: input('api-base-url') ?? DEEPSEEK_BASE_URL,
+    }) as unknown as LlmClient,
     octokit: new Octokit({
       auth: requiredInput('github-token'),
     }) as unknown as OctokitLike & ReportOctokit,

@@ -94,7 +94,7 @@ describe('decide', () => {
 describe('loadPolicy', () => {
   it('carga la política por defecto cuando el repo no tiene .ai/policy.yaml', async () => {
     const p = await loadPolicy(process.cwd());
-    expect(p.model).toBe('claude-sonnet-5');
+    expect(p.model).toBe('deepseek-chat');
     expect(p.minConfidence).toBe(0.7);
     expect(p.blockOn).toEqual(['CRITICAL', 'HIGH']);
     expect(p.auditors['scope']?.when).toBe('always');

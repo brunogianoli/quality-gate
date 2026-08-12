@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { renderSharedContext, runAuditor, type AnthropicLike } from '../src/auditor.js';
+import { renderSharedContext, runAuditor, TOOL_NAME, type LlmClient } from '../src/auditor.js';
 import type { AuditContext, Policy } from '../src/types.js';
 
 const ctx: AuditContext = {
@@ -20,15 +20,24 @@ const ctx: AuditContext = {
 };
 
 const policy: Policy = {
-  model: 'claude-sonnet-5',
+  model: 'deepseek-chat',
   required: ['build', 'tests'],
   blockOn: ['CRITICAL', 'HIGH'],
   minConfidence: 0.7,
   timeoutMs: 5 * 60 * 1000,
   maxRetries: 1,
   onTestFailure: { runAuditors: [] },
-  auditors: { scope: { when: 'always', effort: 'low' } },
+  auditors: { scope: { when: 'always' } },
 };
+
+// El modelo reporta usando la herramienta: el resultado viaja en `input`, no
+// como texto. Es lo que garantiza la estructura sin depender de que obedezca
+// una instrucción de formato.
+function conHerramienta(input: unknown) {
+  return { content: [{ type: 'tool_use', id: 'tu_1', name: TOOL_NAME, input }] };
+}
+
+const resultadoOk = { auditor: 'scope', status: 'PASS', findings: [] };
 
 describe('renderSharedContext', () => {
   it('incluye criterios, archivos y salida de tests', () => {
@@ -45,11 +54,9 @@ describe('renderSharedContext', () => {
 });
 
 describe('runAuditor', () => {
-  it('devuelve el resultado parseado y marca el bloque compartido como cacheable', async () => {
-    const parse = vi.fn().mockResolvedValue({
-      parsed_output: { auditor: 'scope', status: 'PASS', findings: [] },
-    });
-    const client = { messages: { parse } } as unknown as AnthropicLike;
+  it('fuerza el reporte por herramienta y marca el bloque compartido como cacheable', async () => {
+    const create = vi.fn().mockResolvedValue(conHerramienta(resultadoOk));
+    const client = { messages: { create } } as unknown as LlmClient;
 
     const result = await runAuditor({
       client,
@@ -62,33 +69,61 @@ describe('runAuditor', () => {
     expect(result.auditor).toBe('scope');
     expect(result.status).toBe('PASS');
 
-    const args = parse.mock.calls[0]?.[0];
-    expect(args.model).toBe('claude-sonnet-5');
-    expect(args.output_config.effort).toBe('low');
+    const args = create.mock.calls[0]?.[0];
+    expect(args.model).toBe('deepseek-chat');
+    // Sin tool_choice apuntado a la herramienta, el modelo puede contestar en
+    // prosa — que es exactamente lo que hace cuando se le pide un esquema.
+    expect(args.tool_choice).toEqual({ type: 'tool', name: TOOL_NAME });
+    expect(args.tools).toHaveLength(1);
+    expect(args.tools[0].name).toBe(TOOL_NAME);
     expect(args.system[0].cache_control).toEqual({ type: 'ephemeral' });
     expect(args.system[1].text).toContain('scope auditor');
   });
 
+  it('describe el esquema del resultado en la herramienta', async () => {
+    const create = vi.fn().mockResolvedValue(conHerramienta(resultadoOk));
+    const client = { messages: { create } } as unknown as LlmClient;
+
+    await runAuditor({ client, name: 'scope', prompt: 'p', sharedContext: 'c', policy });
+
+    const schema = create.mock.calls[0]?.[0].tools[0].input_schema;
+    expect(schema.type).toBe('object');
+    expect(Object.keys(schema.properties)).toEqual(
+      expect.arrayContaining(['auditor', 'status', 'findings']),
+    );
+  });
+
   it('usa el modelo específico del auditor cuando la política lo define', async () => {
-    const parse = vi.fn().mockResolvedValue({
-      parsed_output: { auditor: 'scope', status: 'PASS', findings: [] },
-    });
-    const client = { messages: { parse } } as unknown as AnthropicLike;
+    const create = vi.fn().mockResolvedValue(conHerramienta(resultadoOk));
+    const client = { messages: { create } } as unknown as LlmClient;
 
     await runAuditor({
       client,
       name: 'scope',
       prompt: 'p',
       sharedContext: 'c',
-      policy: { ...policy, auditors: { scope: { when: 'always', model: 'claude-opus-5' } } },
+      policy: { ...policy, auditors: { scope: { when: 'always', model: 'deepseek-reasoner' } } },
     });
 
-    expect(parse.mock.calls[0]?.[0].model).toBe('claude-opus-5');
+    expect(create.mock.calls[0]?.[0].model).toBe('deepseek-reasoner');
   });
 
-  it('lanza si la respuesta no valida contra el esquema', async () => {
-    const parse = vi.fn().mockResolvedValue({ parsed_output: null });
-    const client = { messages: { parse } } as unknown as AnthropicLike;
+  it('lanza si el modelo contestó en prosa en vez de usar la herramienta', async () => {
+    // El modo de falla real del proveedor: ignora el pedido de estructura y
+    // devuelve texto. Tiene que ser un error legible, no un crash de parseo.
+    const create = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: 'Para devolver el resultado necesito más contexto...' }],
+    });
+    const client = { messages: { create } } as unknown as LlmClient;
+
+    await expect(
+      runAuditor({ client, name: 'scope', prompt: 'p', sharedContext: 'c', policy }),
+    ).rejects.toThrow(/scope/);
+  });
+
+  it('lanza si lo que reportó la herramienta no valida contra el esquema', async () => {
+    const create = vi.fn().mockResolvedValue(conHerramienta({ auditor: 'scope', status: 'QUIZAS' }));
+    const client = { messages: { create } } as unknown as LlmClient;
 
     await expect(
       runAuditor({ client, name: 'scope', prompt: 'p', sharedContext: 'c', policy }),
@@ -96,10 +131,10 @@ describe('runAuditor', () => {
   });
 
   it('fuerza el nombre del auditor aunque el modelo devuelva otro', async () => {
-    const parse = vi.fn().mockResolvedValue({
-      parsed_output: { auditor: 'inventado', status: 'FAIL', findings: [] },
-    });
-    const client = { messages: { parse } } as unknown as AnthropicLike;
+    const create = vi.fn().mockResolvedValue(
+      conHerramienta({ auditor: 'inventado', status: 'FAIL', findings: [] }),
+    );
+    const client = { messages: { create } } as unknown as LlmClient;
 
     const result = await runAuditor({
       client,
@@ -113,23 +148,19 @@ describe('runAuditor', () => {
   });
 
   it('pasa el timeout y los reintentos como opciones de la llamada', async () => {
-    // Sin esto el comportamiento es el del SDK (10 minutos, 2 reintentos), que
-    // no es lo que la política declara y no se puede ajustar por auditor.
-    const parse = vi.fn().mockResolvedValue({
-      parsed_output: { auditor: 'scope', status: 'PASS', findings: [] },
-    });
-    const client = { messages: { parse } } as unknown as AnthropicLike;
+    const create = vi.fn().mockResolvedValue(conHerramienta(resultadoOk));
+    const client = { messages: { create } } as unknown as LlmClient;
 
     await runAuditor({ client, name: 'scope', prompt: 'p', sharedContext: 'c', policy });
 
-    expect(parse.mock.calls[0]?.[1]).toEqual({ timeout: 5 * 60 * 1000, maxRetries: 1 });
+    expect(create.mock.calls[0]?.[1]).toEqual({ timeout: 5 * 60 * 1000, maxRetries: 1 });
   });
 
   it('un auditor puede pisar el timeout y los reintentos de la política', async () => {
-    const parse = vi.fn().mockResolvedValue({
-      parsed_output: { auditor: 'backend', status: 'PASS', findings: [] },
-    });
-    const client = { messages: { parse } } as unknown as AnthropicLike;
+    const create = vi.fn().mockResolvedValue(
+      conHerramienta({ auditor: 'backend', status: 'PASS', findings: [] }),
+    );
+    const client = { messages: { create } } as unknown as LlmClient;
 
     await runAuditor({
       client,
@@ -142,6 +173,6 @@ describe('runAuditor', () => {
       },
     });
 
-    expect(parse.mock.calls[0]?.[1]).toEqual({ timeout: 60_000, maxRetries: 3 });
+    expect(create.mock.calls[0]?.[1]).toEqual({ timeout: 60_000, maxRetries: 3 });
   });
 });

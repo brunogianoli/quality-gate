@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runAuditors } from '../src/orchestrator.js';
-import type { AnthropicLike } from '../src/auditor.js';
+import type { LlmClient } from '../src/auditor.js';
 import type { Policy } from '../src/types.js';
 
 // Nota de implementación: runAuditor() (src/auditor.ts, tarea 7) construye el mensaje de
@@ -23,20 +23,20 @@ const policy: Policy = {
 
 const prompts = { scope: 'p-scope', backend: 'p-backend', security: 'p-security' };
 
-function clientReturning(status: 'PASS' | 'FAIL' = 'PASS'): { client: AnthropicLike; order: string[] } {
+function clientReturning(status: 'PASS' | 'FAIL' = 'PASS'): { client: LlmClient; order: string[] } {
   const order: string[] = [];
   const client = {
     messages: {
-      parse: vi.fn(async (args: Record<string, unknown>) => {
+      create: vi.fn(async (args: Record<string, unknown>) => {
         const msgs = args['messages'] as Array<{ content: string }>;
         const matches = [...msgs[0]!.content.matchAll(/"([a-z]+)"/g)];
         const name = matches.at(-1)?.[1] ?? 'unknown';
         order.push(name);
         await new Promise((r) => setTimeout(r, 5));
-        return { parsed_output: { auditor: name, status, findings: [] } };
+        return { content: [{ type: 'tool_use', input: { auditor: name, status, findings: [] } }] };
       }),
     },
-  } as unknown as AnthropicLike;
+  } as unknown as LlmClient;
   return { client, order };
 }
 
@@ -69,17 +69,17 @@ describe('runAuditors', () => {
     const events: Array<{ auditor: string; fase: 'inicio' | 'fin' }> = [];
     const client = {
       messages: {
-        parse: vi.fn(async (args: Record<string, unknown>) => {
+        create: vi.fn(async (args: Record<string, unknown>) => {
           const msgs = args['messages'] as Array<{ content: string }>;
           const matches = [...msgs[0]!.content.matchAll(/"([a-z]+)"/g)];
           const name = matches.at(-1)?.[1] ?? 'unknown';
           events.push({ auditor: name, fase: 'inicio' });
           await new Promise((r) => setTimeout(r, 10));
           events.push({ auditor: name, fase: 'fin' });
-          return { parsed_output: { auditor: name, status: 'PASS', findings: [] } };
+          return { content: [{ type: 'tool_use', input: { auditor: name, status: 'PASS', findings: [] } }] };
         }),
       },
-    } as unknown as AnthropicLike;
+    } as unknown as LlmClient;
 
     await runAuditors({ client, names: ['scope', 'backend', 'security'], prompts, sharedContext: 'c', policy });
 
@@ -102,15 +102,15 @@ describe('runAuditors', () => {
   it('acumula el error de un auditor sin perder los demás resultados', async () => {
     const client = {
       messages: {
-        parse: vi.fn(async (args: Record<string, unknown>) => {
+        create: vi.fn(async (args: Record<string, unknown>) => {
           const msgs = args['messages'] as Array<{ content: string }>;
           const matches = [...msgs[0]!.content.matchAll(/"([a-z]+)"/g)];
           const name = matches.at(-1)?.[1] ?? 'unknown';
           if (name === 'backend') throw new Error('503 overloaded');
-          return { parsed_output: { auditor: name, status: 'PASS', findings: [] } };
+          return { content: [{ type: 'tool_use', input: { auditor: name, status: 'PASS', findings: [] } }] };
         }),
       },
-    } as unknown as AnthropicLike;
+    } as unknown as LlmClient;
 
     const { results, errors } = await runAuditors({
       client,
@@ -154,17 +154,17 @@ describe('runAuditors', () => {
     const events: Array<{ auditor: string; fase: 'inicio' | 'fin' }> = [];
     const client = {
       messages: {
-        parse: vi.fn(async (args: Record<string, unknown>) => {
+        create: vi.fn(async (args: Record<string, unknown>) => {
           const msgs = args['messages'] as Array<{ content: string }>;
           const matches = [...msgs[0]!.content.matchAll(/"([a-z]+)"/g)];
           const name = matches.at(-1)?.[1] ?? 'unknown';
           events.push({ auditor: name, fase: 'inicio' });
           await new Promise((r) => setTimeout(r, 10));
           events.push({ auditor: name, fase: 'fin' });
-          return { parsed_output: { auditor: name, status: 'PASS', findings: [] } };
+          return { content: [{ type: 'tool_use', input: { auditor: name, status: 'PASS', findings: [] } }] };
         }),
       },
-    } as unknown as AnthropicLike;
+    } as unknown as LlmClient;
 
     const { results, errors } = await runAuditors({
       client,

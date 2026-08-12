@@ -26,7 +26,6 @@ const TriggerSchema = z.enum([
 
 const AuditorPolicySchema = z.object({
   when: z.union([z.literal('always'), z.literal('criteria_available'), z.array(TriggerSchema)]),
-  effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
   model: z.string().optional(),
   timeout_ms: z.number().int().positive().optional(),
   max_retries: z.number().int().min(0).optional(),
@@ -67,7 +66,6 @@ function normalizeAuditors(raw: RawPolicy['auditors']): Record<string, AuditorPo
   for (const [name, cfg] of Object.entries(raw ?? {})) {
     auditors[name] = {
       when: cfg.when,
-      effort: cfg.effort,
       model: cfg.model,
       timeoutMs: cfg.timeout_ms,
       maxRetries: cfg.max_retries,
@@ -78,7 +76,7 @@ function normalizeAuditors(raw: RawPolicy['auditors']): Record<string, AuditorPo
 
 function normalize(raw: RawPolicy, base?: Policy): Policy {
   return {
-    model: raw.model ?? base?.model ?? 'claude-sonnet-5',
+    model: raw.model ?? base?.model ?? 'deepseek-chat',
     required: raw.required ?? base?.required ?? ['build', 'tests'],
     blockOn: raw.block_on ?? base?.blockOn ?? ['CRITICAL', 'HIGH'],
     minConfidence: raw.min_confidence ?? base?.minConfidence ?? 0.7,

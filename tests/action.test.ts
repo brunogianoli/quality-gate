@@ -10,7 +10,7 @@ describe('action.yml', () => {
     };
     expect(action.runs.main).toBe('dist/index.js');
     expect(action.runs.using).toMatch(/^node\d+$/);
-    expect(action.inputs['anthropic-api-key']?.required).toBe(true);
+    expect(action.inputs['deepseek-api-key']?.required).toBe(true);
   });
 
   it('el bundle existe y no requiere node_modules', async () => {

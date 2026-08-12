@@ -3,9 +3,12 @@ description: 'Audita cada PR con auditores de IA especializados y bloquea el mer
 author: 'brunogianoli'
 
 inputs:
-  anthropic-api-key:
-    description: 'API key de Anthropic para los auditores.'
+  deepseek-api-key:
+    description: 'API key de DeepSeek para los auditores.'
     required: true
+  api-base-url:
+    description: 'Endpoint compatible con el formato de la API de Anthropic. Por defecto, el de DeepSeek.'
+    required: false
   github-token:
     description: 'Token con permiso para comentar y crear checks.'
     required: false

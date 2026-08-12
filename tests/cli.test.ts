@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { runGate, input, requiredInput, type GateDeps } from '../src/cli.js';
-import type { AnthropicLike } from '../src/auditor.js';
+import type { LlmClient } from '../src/auditor.js';
 import type { Policy } from '../src/types.js';
 
 const policy: Policy = {
@@ -21,13 +21,13 @@ const policy: Policy = {
 function deps(overrides: Partial<GateDeps> = {}): GateDeps {
   const anthropic = {
     messages: {
-      parse: vi.fn(async (args: Record<string, unknown>) => {
+      create: vi.fn(async (args: Record<string, unknown>) => {
         const msgs = args['messages'] as Array<{ content: string }>;
         const name = /exactamente "([a-z]+)"/.exec(msgs[0]!.content)?.[1] ?? 'x';
-        return { parsed_output: { auditor: name, status: 'PASS', findings: [] } };
+        return { content: [{ type: 'tool_use', input: { auditor: name, status: 'PASS', findings: [] } }] };
       }),
     },
-  } as unknown as AnthropicLike;
+  } as unknown as LlmClient;
 
   return {
     owner: 'o',
@@ -70,7 +70,7 @@ describe('runGate', () => {
   });
 
   it('corta sin llamar a la IA cuando el build falla', async () => {
-    const anthropic = { messages: { parse: vi.fn() } } as unknown as AnthropicLike;
+    const anthropic = { messages: { create: vi.fn() } } as unknown as LlmClient;
     const d = await runGate(
       deps({
         anthropic,
@@ -82,16 +82,16 @@ describe('runGate', () => {
       }),
     );
     expect(d.verdict).toBe('FAIL');
-    expect(anthropic.messages.parse).not.toHaveBeenCalled();
+    expect(anthropic.messages.create).not.toHaveBeenCalled();
   });
 
   it('con tests fallando corre sólo scope y acceptance', async () => {
-    const parse = vi.fn(async (args: Record<string, unknown>) => {
+    const create = vi.fn(async (args: Record<string, unknown>) => {
       const msgs = args['messages'] as Array<{ content: string }>;
       const name = /exactamente "([a-z]+)"/.exec(msgs[0]!.content)?.[1] ?? 'x';
-      return { parsed_output: { auditor: name, status: 'PASS', findings: [] } };
+      return { content: [{ type: 'tool_use', input: { auditor: name, status: 'PASS', findings: [] } }] };
     });
-    const anthropic = { messages: { parse } } as unknown as AnthropicLike;
+    const anthropic = { messages: { create } } as unknown as LlmClient;
 
     const d = await runGate(
       deps({
@@ -105,7 +105,7 @@ describe('runGate', () => {
     );
 
     expect(d.verdict).toBe('FAIL');
-    const called = parse.mock.calls.map((c) => {
+    const called = create.mock.calls.map((c) => {
       const msgs = (c[0] as Record<string, unknown>)['messages'] as Array<{ content: string }>;
       return /exactamente "([a-z]+)"/.exec(msgs[0]!.content)?.[1];
     });

@@ -1,8 +1,8 @@
-import { runAuditor, type AnthropicLike } from './auditor.js';
+import { runAuditor, type LlmClient } from './auditor.js';
 import type { AuditorResult, Policy } from './types.js';
 
 export interface RunAuditorsDeps {
-  client: AnthropicLike;
+  client: LlmClient;
   names: string[];
   prompts: Record<string, string>;
   sharedContext: string;

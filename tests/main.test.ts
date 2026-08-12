@@ -57,7 +57,8 @@ vi.mock('@octokit/rest', () => ({
 }));
 
 const ENV_KEYS = [
-  'INPUT_ANTHROPIC-API-KEY',
+  'INPUT_DEEPSEEK-API-KEY',
+  'INPUT_API-BASE-URL',
   'INPUT_GITHUB-TOKEN',
   'GITHUB_EVENT_PATH',
   'GITHUB_REPOSITORY',
@@ -84,7 +85,7 @@ describe('main() — construye Anthropic/Octokit con los inputs reales de la Act
       'utf8',
     );
 
-    process.env['INPUT_ANTHROPIC-API-KEY'] = 'sk-ant-from-input';
+    process.env['INPUT_DEEPSEEK-API-KEY'] = 'sk-deepseek-from-input';
     process.env['INPUT_GITHUB-TOKEN'] = 'ghp-from-input';
     process.env['GITHUB_EVENT_PATH'] = eventPath;
     process.env['GITHUB_REPOSITORY'] = 'acme/widgets';
@@ -96,13 +97,32 @@ describe('main() — construye Anthropic/Octokit con los inputs reales de la Act
     await rm(workspace, { recursive: true, force: true });
   });
 
-  it('pasa INPUT_ANTHROPIC-API-KEY como apiKey e INPUT_GITHUB-TOKEN como auth', async () => {
+  it('pasa INPUT_DEEPSEEK-API-KEY como apiKey e INPUT_GITHUB-TOKEN como auth', async () => {
     await main();
 
     expect(anthropicCtor).toHaveBeenCalledTimes(1);
-    expect(anthropicCtor.mock.calls[0]?.[0]).toMatchObject({ apiKey: 'sk-ant-from-input' });
+    expect(anthropicCtor.mock.calls[0]?.[0]).toMatchObject({ apiKey: 'sk-deepseek-from-input' });
 
     expect(octokitCtor).toHaveBeenCalledTimes(1);
     expect(octokitCtor.mock.calls[0]?.[0]).toMatchObject({ auth: 'ghp-from-input' });
+  });
+
+  it('apunta el cliente al endpoint de DeepSeek, no al de Anthropic', async () => {
+    // El SDK es el de Anthropic: sin baseURL las llamadas irían a api.anthropic.com
+    // y fallarían con la key de DeepSeek.
+    await main();
+
+    expect(anthropicCtor.mock.calls[0]?.[0]).toMatchObject({
+      baseURL: 'https://api.deepseek.com/anthropic',
+    });
+  });
+
+  it('permite apuntar a otro proveedor compatible con el input api-base-url', async () => {
+    process.env['INPUT_API-BASE-URL'] = 'https://ejemplo.interno/anthropic';
+    await main();
+
+    expect(anthropicCtor.mock.calls[0]?.[0]).toMatchObject({
+      baseURL: 'https://ejemplo.interno/anthropic',
+    });
   });
 });

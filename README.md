@@ -7,7 +7,7 @@ abrió la PR corrija.
 
 ## Instalación
 
-1. Agregá `ANTHROPIC_API_KEY` a los secrets del repositorio
+1. Agregá `DEEPSEEK_API_KEY` a los secrets del repositorio
    (Settings → Secrets and variables → Actions).
 
 2. Creá `.github/workflows/ai-quality-gate.yml`:
@@ -37,7 +37,7 @@ jobs:
           fetch-depth: 0        # necesario para calcular el diff de la PR
       - uses: brunogianoli/quality-gate@v1
         with:
-          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          deepseek-api-key: ${{ secrets.DEEPSEEK_API_KEY }}
 ```
 
 3. Para que el gate bloquee de verdad, marcá el check **AI Quality Gate** como
@@ -56,7 +56,7 @@ max_retries: 1             # ante 429 y 5xx, con backoff exponencial
 
 auditors:
   security:
-    model: claude-opus-5   # un modelo más capaz sólo para este auditor
+    model: deepseek-reasoner # un modelo que razona más, sólo para este auditor
     timeout_ms: 600000     # y más tiempo, porque piensa más
 ```
 
