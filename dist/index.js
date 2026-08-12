@@ -32035,23 +32035,34 @@ function normalizeStatus(status) {
   if (status === "added" || status === "removed" || status === "renamed") return status;
   return "modified";
 }
+var PER_PAGE = 100;
+async function listAllFiles(octokit, owner, repo, prNumber) {
+  const files = [];
+  for (let page = 1; ; page++) {
+    const { data } = await octokit.pulls.listFiles({
+      owner,
+      repo,
+      pull_number: prNumber,
+      per_page: PER_PAGE,
+      page
+    });
+    for (const f of data) {
+      files.push({
+        path: f.filename,
+        status: normalizeStatus(f.status),
+        additions: f.additions,
+        deletions: f.deletions,
+        patch: f.patch ?? null
+      });
+    }
+    if (data.length < PER_PAGE) return files;
+  }
+}
 async function buildContext(deps) {
   const { octokit, owner, repo, prNumber, commitSha, runner } = deps;
   const pr = await octokit.pulls.get({ owner, repo, pull_number: prNumber });
   const prBody = pr.data.body ?? null;
-  const filesResponse = await octokit.pulls.listFiles({
-    owner,
-    repo,
-    pull_number: prNumber,
-    per_page: 300
-  });
-  const changedFiles = filesResponse.data.map((f) => ({
-    path: f.filename,
-    status: normalizeStatus(f.status),
-    additions: f.additions,
-    deletions: f.deletions,
-    patch: f.patch ?? null
-  }));
+  const changedFiles = await listAllFiles(octokit, owner, repo, prNumber);
   let criteria = null;
   let criteriaSource = null;
   const issueNumber = extractIssueNumber(prBody);
@@ -32262,14 +32273,23 @@ function renderComment(deps) {
   }
   return parts.join("\n");
 }
+var PER_PAGE2 = 100;
+async function findMarkerComment(octokit, ctx) {
+  for (let page = 1; ; page++) {
+    const { data } = await octokit.issues.listComments({
+      owner: ctx.owner,
+      repo: ctx.repo,
+      issue_number: ctx.prNumber,
+      per_page: PER_PAGE2,
+      page
+    });
+    const found = data.find((c) => c.body?.includes(MARKER));
+    if (found) return found;
+    if (data.length < PER_PAGE2) return null;
+  }
+}
 async function upsertComment(octokit, ctx, body) {
-  const { data } = await octokit.issues.listComments({
-    owner: ctx.owner,
-    repo: ctx.repo,
-    issue_number: ctx.prNumber,
-    per_page: 100
-  });
-  const existing = data.find((c) => c.body?.includes(MARKER));
+  const existing = await findMarkerComment(octokit, ctx);
   if (existing) {
     await octokit.issues.updateComment({
       owner: ctx.owner,
