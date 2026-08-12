@@ -32003,6 +32003,28 @@ async function runAuditors(deps) {
   return { results, errors };
 }
 
+// src/findings.ts
+var LINE_WINDOW = 2;
+function esElMismoDefecto(a, b) {
+  if (a.file !== b.file || a.severity !== b.severity) return false;
+  if (a.line === null || b.line === null) return a.line === b.line;
+  return Math.abs(a.line - b.line) <= LINE_WINDOW;
+}
+function dedupeFindings(findings) {
+  const conservados = [];
+  for (const finding of findings) {
+    const yaVisto = conservados.findIndex((otro) => esElMismoDefecto(otro, finding));
+    if (yaVisto === -1) {
+      conservados.push(finding);
+      continue;
+    }
+    const actual = conservados[yaVisto];
+    const reemplaza = finding.confidence > actual.confidence || finding.confidence === actual.confidence && finding.message.length > actual.message.length;
+    if (reemplaza) conservados[yaVisto] = finding;
+  }
+  return conservados;
+}
+
 // src/policy.ts
 var import_yaml = __toESM(require_dist(), 1);
 import { readFile } from "node:fs/promises";
@@ -32406,7 +32428,7 @@ async function runGate(deps) {
         });
       }
     }
-    const findings = results.results.flatMap((r) => r.findings);
+    const findings = dedupeFindings(results.results.flatMap((r) => r.findings));
     let decision = decide(policy, runner, findings);
     if (decision.verdict === "PASS" && names.length > 0 && results.results.length === 0) {
       decision = {
