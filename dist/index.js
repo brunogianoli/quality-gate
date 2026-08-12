@@ -32101,6 +32101,40 @@ import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 var here = dirname(fileURLToPath(import.meta.url));
+var TriggerSchema = external_exports.enum([
+  "backend_changed",
+  "database_changed",
+  "infra_changed",
+  "auth_changed",
+  "deps_changed",
+  "endpoints_changed"
+]);
+var AuditorPolicySchema = external_exports.object({
+  when: external_exports.union([external_exports.literal("always"), external_exports.literal("criteria_available"), external_exports.array(TriggerSchema)]),
+  effort: external_exports.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+  model: external_exports.string().optional()
+});
+var RawPolicySchema = external_exports.object({
+  model: external_exports.string().optional(),
+  required: external_exports.array(external_exports.enum(["build", "tests"])).optional(),
+  block_on: external_exports.array(external_exports.enum(SEVERITIES)).optional(),
+  min_confidence: external_exports.number().min(0).max(1).optional(),
+  on_test_failure: external_exports.object({ run_auditors: external_exports.array(external_exports.string()).optional() }).optional(),
+  auditors: external_exports.record(external_exports.string(), AuditorPolicySchema).optional()
+});
+function parsePolicy(source, label) {
+  const yaml = (0, import_yaml.parse)(source);
+  const result = RawPolicySchema.safeParse(yaml);
+  if (!result.success) {
+    const issue2 = result.error.issues[0];
+    const field = issue2 && issue2.path.length > 0 ? issue2.path.join(".") : "(ra\xEDz del documento)";
+    const detail = issue2?.message ?? result.error.message;
+    throw new Error(
+      `Pol\xEDtica inv\xE1lida en ${label}: el campo "${field}" no cumple el esquema esperado (${detail}). Revis\xE1 el YAML.`
+    );
+  }
+  return result.data;
+}
 function normalize(raw, base) {
   return {
     model: raw.model ?? base?.model ?? "claude-sonnet-5",
@@ -32114,24 +32148,30 @@ function normalize(raw, base) {
   };
 }
 async function loadPolicy(repoDir) {
-  const defaultRaw = (0, import_yaml.parse)(
-    await readFile(join(here, "..", "policies", "default.yaml"), "utf8")
-  );
+  const defaultPath = join(here, "..", "policies", "default.yaml");
+  const defaultRaw = parsePolicy(await readFile(defaultPath, "utf8"), defaultPath);
   const defaults = normalize(defaultRaw);
+  const overridePath = join(repoDir, ".ai", "policy.yaml");
+  let overrideSource;
   try {
-    const overrideRaw = (0, import_yaml.parse)(
-      await readFile(join(repoDir, ".ai", "policy.yaml"), "utf8")
-    );
-    return normalize(overrideRaw, defaults);
-  } catch {
-    return defaults;
+    overrideSource = await readFile(overridePath, "utf8");
+  } catch (err) {
+    if (err.code === "ENOENT") return defaults;
+    throw err;
   }
+  const overrideRaw = parsePolicy(overrideSource, overridePath);
+  return normalize(overrideRaw, defaults);
 }
+function nothingRan(runner) {
+  return runner.install === null && runner.build === null && runner.test === null;
+}
+var UNVERIFIED_NOTE = " El stack del repositorio no fue reconocido: no se instalaron dependencias, no se corri\xF3 build ni tests. Este veredicto no verifica nada \u2014 revis\xE1 `detectStack` o agreg\xE1 el stack al orquestador.";
 function decide(policy, runner, findings) {
   const blocking = findings.filter(
     (f) => policy.blockOn.includes(f.severity) && f.confidence >= policy.minConfidence
   );
   const informational = findings.filter((f) => !blocking.includes(f));
+  const unverifiedNote = nothingRan(runner) ? UNVERIFIED_NOTE : "";
   if (runner.install && !runner.install.ok) {
     return { verdict: "FAIL", blocking, informational, reason: "La instalaci\xF3n de dependencias fall\xF3." };
   }
@@ -32146,10 +32186,10 @@ function decide(policy, runner, findings) {
       verdict: "FAIL",
       blocking,
       informational,
-      reason: `${blocking.length} finding(s) bloqueante(s).`
+      reason: `${blocking.length} finding(s) bloqueante(s).${unverifiedNote}`
     };
   }
-  return { verdict: "PASS", blocking, informational, reason: "Sin findings bloqueantes." };
+  return { verdict: "PASS", blocking, informational, reason: `Sin findings bloqueantes.${unverifiedNote}` };
 }
 
 // src/prompts.ts
@@ -32198,6 +32238,7 @@ function renderComment(deps) {
     decision.reason,
     ""
   ];
+  if (ctx.runner.install) parts.push(`**Install:** ${ctx.runner.install.ok ? "ok" : "fall\xF3"}`);
   if (ctx.runner.build) parts.push(`**Build:** ${ctx.runner.build.ok ? "ok" : "fall\xF3"}`);
   if (ctx.runner.test) parts.push(`**Tests:** ${ctx.runner.test.ok ? "ok" : "fallaron"}`);
   parts.push(`**Auditores:** ${auditors.length > 0 ? auditors.join(" \xB7 ") : "ninguno"}`);
@@ -32213,8 +32254,11 @@ function renderComment(deps) {
   if (decision.informational.length > 0) {
     parts.push("", "---", "", "<details><summary>Findings informativos (no bloquean)</summary>", "", ...decision.informational.map(renderFinding), "", "</details>");
   }
-  if (decision.verdict === "FAIL" && !ctx.runner.test?.ok && ctx.runner.test) {
-    parts.push("", "```", ctx.runner.test.output, "```");
+  const failedStep = [ctx.runner.install, ctx.runner.build, ctx.runner.test].find(
+    (step) => step !== null && !step.ok
+  );
+  if (decision.verdict === "FAIL" && failedStep) {
+    parts.push("", "```", failedStep.output, "```");
   }
   return parts.join("\n");
 }
@@ -32283,16 +32327,29 @@ async function exists(path2) {
     return false;
   }
 }
+async function detectNodePackageManager(dir) {
+  if (await exists(join3(dir, "yarn.lock"))) {
+    return { install: "yarn install --frozen-lockfile", build: "yarn build", test: "yarn test" };
+  }
+  if (await exists(join3(dir, "pnpm-lock.yaml"))) {
+    return { install: "pnpm install --frozen-lockfile", build: "pnpm build", test: "pnpm test" };
+  }
+  if (await exists(join3(dir, "package-lock.json"))) {
+    return { install: "npm ci", build: "npm run build", test: "npm test" };
+  }
+  return { install: "npm install", build: "npm run build", test: "npm test" };
+}
 async function detectStack(dir) {
   if (await exists(join3(dir, "package.json"))) {
     const raw = await readFile3(join3(dir, "package.json"), "utf8");
     const pkg = JSON.parse(raw);
     const scripts = pkg.scripts ?? {};
+    const pm = await detectNodePackageManager(dir);
     return {
       kind: "node",
-      install: "npm ci",
-      build: scripts["build"] ? "npm run build" : null,
-      test: scripts["test"] ? "npm test" : null
+      install: pm.install,
+      build: scripts["build"] ? pm.build : null,
+      test: scripts["test"] ? pm.test : null
     };
   }
   if (await exists(join3(dir, "pom.xml"))) {
