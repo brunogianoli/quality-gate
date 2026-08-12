@@ -50,6 +50,25 @@ describe('loadPrompts', () => {
     ]);
   });
 
+  it('no expone los archivos compartidos como si fueran auditores', async () => {
+    // `_shared.md` es calibración común, no un auditor: si entrara al registro,
+    // la política podría "seleccionarlo" y el orquestador intentaría correrlo.
+    const prompts = await loadPrompts();
+    for (const name of Object.keys(prompts)) {
+      expect(name.startsWith('_'), `${name} no debería estar registrado`).toBe(false);
+    }
+  });
+
+  it('cada auditor recibe la calibración de severidad compartida', async () => {
+    // Sin esto la escala la inventa el modelo, y lo que se vio en producción
+    // fueron findings HIGH cuyo propio texto decía que el código estaba bien.
+    const prompts = await loadPrompts();
+    for (const [name, text] of Object.entries(prompts)) {
+      expect(text, `${name} debe incluir la escala de severidad`).toContain('# SEVERITY');
+      expect(text, `${name} debe incluir qué no es un finding`).toContain('# WHAT IS NOT A FINDING');
+    }
+  });
+
   it('cada prompt declara las cuatro secciones obligatorias', async () => {
     const prompts = await loadPrompts();
     for (const [name, text] of Object.entries(prompts)) {
