@@ -143,13 +143,12 @@ describe('runAuditors', () => {
     expect(errors[0]).toContain('fantasma');
   });
 
-  it('documenta qué pasa si el PRIMER auditor no tiene prompt: el caché no se cebó y el resto igual se lanza, pero en paralelo', async () => {
-    // Si `names[0]` no tiene prompt, `attempt(first)` retorna temprano sin invocar
-    // runAuditor: no hay llamada a la API, así que el bloque de contexto compartido
-    // nunca se escribe en el caché de Anthropic. Acto seguido `Promise.all(rest.map(attempt))`
-    // lanza a todos los demás auditores en paralelo de todas formas — exactamente el
-    // escenario económico (todos pagan la escritura completa del caché) que el módulo
-    // existe para evitar. Este test no arregla nada: documenta el comportamiento actual.
+  it('ceba el caché con el primer auditor que SÍ tiene prompt, no con el primero de la lista', async () => {
+    // Quién ceba el caché no puede decidirse por la posición en el array: un
+    // auditor sin prompt retorna sin invocar runAuditor, así que no hay llamada
+    // a la API y nadie escribe el bloque compartido. Si el turno de cebado se
+    // gasta ahí, el resto sale en paralelo pagando la escritura completa cada
+    // uno — justo el gasto que este módulo existe para evitar.
     const events: Array<{ auditor: string; fase: 'inicio' | 'fin' }> = [];
     const client = {
       messages: {
@@ -178,16 +177,24 @@ describe('runAuditors', () => {
     expect(errors).toHaveLength(1);
     expect(errors[0]).toContain('fantasma');
 
-    // Comportamiento observado: backend y security arrancan los dos ANTES de que
-    // cualquiera termine — es decir, corren en paralelo, sin haber cebado el caché.
-    const startIndexes = events
-      .map((e, i) => ({ ...e, i }))
-      .filter((e) => e.fase === 'inicio')
-      .map((e) => e.i);
-    const firstFinIndex = events.findIndex((e) => e.fase === 'fin');
-    expect(startIndexes).toHaveLength(2);
-    for (const startIndex of startIndexes) {
-      expect(startIndex).toBeLessThan(firstFinIndex);
-    }
+    // `backend` es el primero con prompt: tiene que haber terminado antes de
+    // que `security` arranque.
+    const backendFinIndex = events.findIndex((e) => e.auditor === 'backend' && e.fase === 'fin');
+    const securityStartIndex = events.findIndex((e) => e.auditor === 'security' && e.fase === 'inicio');
+    expect(backendFinIndex).toBeGreaterThanOrEqual(0);
+    expect(securityStartIndex).toBeGreaterThan(backendFinIndex);
+  });
+
+  it('no rompe si ningún auditor tiene prompt', async () => {
+    const { client } = clientReturning();
+    const { results, errors } = await runAuditors({
+      client,
+      names: ['fantasma', 'espectro'],
+      prompts,
+      sharedContext: 'c',
+      policy,
+    });
+    expect(results).toHaveLength(0);
+    expect(errors).toHaveLength(2);
   });
 });

@@ -19,12 +19,20 @@ export async function runAuditors(deps: RunAuditorsDeps): Promise<RunAuditorsOut
   const results: AuditorResult[] = [];
   const errors: string[] = [];
 
-  const attempt = async (name: string): Promise<void> => {
+  // Un auditor sin prompt no llega a llamar a la API, así que no puede cebar
+  // nada. Se descarta acá para que el turno de cebado le toque a alguien que
+  // sí va a escribir el caché.
+  const runnable: Array<{ name: string; prompt: string }> = [];
+  for (const name of names) {
     const prompt = prompts[name];
-    if (!prompt) {
+    if (prompt) {
+      runnable.push({ name, prompt });
+    } else {
       errors.push(`No se encontró el prompt del auditor "${name}" en agents/.`);
-      return;
     }
+  }
+
+  const attempt = async ({ name, prompt }: { name: string; prompt: string }): Promise<void> => {
     try {
       results.push(await runAuditor({ client, name, prompt, sharedContext, policy }));
     } catch (err) {
@@ -33,12 +41,12 @@ export async function runAuditors(deps: RunAuditorsDeps): Promise<RunAuditorsOut
     }
   };
 
-  const [first, ...rest] = names;
-  if (first === undefined) return { results, errors };
+  const [primer, ...rest] = runnable;
+  if (primer === undefined) return { results, errors };
 
   // El primero corre solo: escribe el caché del contexto compartido.
   // Los demás sólo pueden leerlo una vez que esta llamada terminó.
-  await attempt(first);
+  await attempt(primer);
 
   await Promise.all(rest.map(attempt));
 
