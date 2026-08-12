@@ -46,12 +46,22 @@ Fallan hacia el lado seguro o su impacto es acotado.
 
 ## Lo que falta de verdad
 
-Nada de lo anterior es lo más importante. **El sistema nunca habló con la API de
-Anthropic ni con GitHub.** Los 116 tests de `npm test` corren con ambas
-mockeadas, que es lo correcto para una suite unitaria. Los de integración sí
-ejecutan un repositorio real, pero sólo la mitad determinista del gate: detectar
-el stack, correr build y tests, y calcular el veredicto. Los auditores —la parte
-que define si esto sirve— siguen sin haberse ejecutado nunca de verdad.
+Nada de lo anterior es lo más importante. **El sistema nunca corrió entero.**
+Los 120 tests de `npm test` corren con las dos APIs mockeadas, que es lo
+correcto para una suite unitaria, y los de integración ejecutan un repositorio
+real pero sólo la mitad determinista del gate: detectar el stack, correr build y
+tests, y calcular el veredicto.
+
+Lo que sí se probó contra la API real, a mano, con un sondeo descartable: un
+auditor (`backend`, con su prompt real) encontró un bug plantado y devolvió un
+finding que valida contra el esquema, en 3,9 segundos. Eso confirma que el
+mecanismo de tool use forzado funciona y que los prompts producen algo útil.
+
+Lo que sigue sin ejecutarse nunca: **el pipeline completo, y GitHub.** Nadie
+corrió los seis auditores en paralelo contra una PR de verdad, ni publicó un
+comentario, ni creó un check run. Tampoco se sabe si los auditores generan ruido
+sobre cambios normales — un solo caso con un bug evidente no dice nada sobre
+falsos positivos, que es el invariante que más importa.
 
 El criterio de éxito del spec sigue sin cumplirse: abrir una PR de verdad en el
 repositorio fixture, ver el gate correr solo, comentar el `FAIL`, y que un push
