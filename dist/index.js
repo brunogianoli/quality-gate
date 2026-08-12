@@ -31870,6 +31870,22 @@ ${f.patch}`).join("\n\n");
 async function runAuditor(deps) {
   const { client, name, prompt, sharedContext, policy } = deps;
   const cfg = policy.auditors[name];
+  const maxRetries = cfg?.maxRetries ?? policy.maxRetries;
+  let ultimoError = null;
+  for (let intento = 0; intento <= maxRetries; intento++) {
+    try {
+      return await intentarAuditoria(deps, cfg);
+    } catch (err) {
+      if (!(err instanceof RespuestaInvalidaError)) throw err;
+      ultimoError = err;
+    }
+  }
+  throw ultimoError ?? new Error(`El auditor ${name} no pudo completarse.`);
+}
+var RespuestaInvalidaError = class extends Error {
+};
+async function intentarAuditoria(deps, cfg) {
+  const { client, name, prompt, sharedContext, policy } = deps;
   const response = await client.messages.create(
     {
       model: cfg?.model ?? policy.model,
@@ -31905,13 +31921,15 @@ async function runAuditor(deps) {
   const reporte = response.content.find((block) => block.type === "tool_use");
   if (!reporte) {
     const tipos = response.content.map((block) => block.type).join(", ") || "ninguno";
-    throw new Error(
+    throw new RespuestaInvalidaError(
       `El auditor ${name} no us\xF3 la herramienta para reportar: la respuesta trajo ${tipos}.`
     );
   }
   const parsed = AuditorResultSchema.safeParse(reporte.input);
   if (!parsed.success) {
-    throw new Error(`El auditor ${name} devolvi\xF3 una respuesta inv\xE1lida: ${parsed.error.message}`);
+    throw new RespuestaInvalidaError(
+      `El auditor ${name} devolvi\xF3 una respuesta inv\xE1lida: ${parsed.error.message}`
+    );
   }
   return { ...parsed.data, auditor: name };
 }
